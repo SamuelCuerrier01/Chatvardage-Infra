@@ -362,4 +362,4 @@ Autres mesures :
   sur la barre de titre) ; les raccourcis clavier du système restent actifs.
 - Les builds macOS/Windows/Linux sont générés par leurs runners respectifs dans GitHub Actions.
 
-La déconnexion locale et le retour à la connexion n’attendent pas la révocation HTTP, envoyée en arrière-plan. Le renouvellement automatique reste suspendu pendant une rotation explicite ; une réponse de renouvellement antérieure ne remplace pas les jetons issus de cette rotation.
+La déconnexion locale et le retour à la connexion n’attendent pas la révocation HTTP, envoyée en arrière-plan. Les requêtes de fond ne déclenchent pas de renouvellement pendant une rotation explicite, mais la requête initiale de cette rotation peut renouveler un accès expiré avant de réessayer ; une réponse de renouvellement antérieure ne remplace pas les jetons issus de cette rotation.
