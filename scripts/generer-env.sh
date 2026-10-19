@@ -1,10 +1,6 @@
 #!/usr/bin/env sh
 set -eu
 
-# Génère A26_5A6_01-Infra/.env à partir de .env.example en remplaçant
-# toutes les valeurs sensibles par des secrets hexadécimaux aléatoires.
-# Usage : ./scripts/generer-env.sh [--force]
-
 SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 INFRA_DIR=$(dirname "$SCRIPT_DIR")
 TEMPLATE="$INFRA_DIR/.env.example"
@@ -37,8 +33,6 @@ secret() {
   openssl rand -hex 32
 }
 
-# Tous ces secrets sont distincts. Les mots de passe sont hexadécimaux afin
-# d'être sûrs dans les URL PostgreSQL/Redis sans encodage supplémentaire.
 POSTGRES_SUPERPASS_VALUE=$(secret)
 AUTH_DB_PASSWORD_VALUE=$(secret)
 ROOMS_DB_PASSWORD_VALUE=$(secret)
@@ -56,7 +50,6 @@ trap 'rm -f "$TMP"' EXIT HUP INT TERM
 
 seen=""
 while IFS= read -r line || [ -n "$line" ]; do
-  # Tolère un template CRLF et produit toujours un .env LF.
   line=$(printf '%s' "$line" | tr -d '\r')
   case "$line" in
     POSTGRES_SUPERPASS=*) echo "POSTGRES_SUPERPASS=$POSTGRES_SUPERPASS_VALUE"; seen="$seen POSTGRES_SUPERPASS" ;;

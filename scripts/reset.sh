@@ -2,11 +2,7 @@
 
 set -eu
 
-# Exécuter depuis la racine du dépôt, où se trouvent docker-compose.yml et .env.
 cd "$(dirname "$0")/.."
-
-# Usage : ./scripts/reset.sh [-y|--force]
-# -y/--force saute la confirmation (CI, scripts automatisés).
 
 force=0
 
@@ -28,7 +24,6 @@ for arg in "$@"; do
 done
 
 if [ "$force" -ne 1 ]; then
-  # Sans terminal, read bloquerait ou lirait une entrée inattendue.
   if [ ! -t 0 ]; then
     echo "Entrée non interactive : relancer avec -y/--force pour confirmer la suppression des volumes." >&2
     exit 1

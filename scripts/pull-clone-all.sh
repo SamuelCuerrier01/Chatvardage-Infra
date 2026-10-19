@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 set -u
-# --------------------------------------------------
-# Configuration
-# --------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFRA_DIR="$(dirname "$SCRIPT_DIR")"
 BASE_DIR="$(dirname "$INFRA_DIR")"
@@ -21,9 +18,6 @@ SUCCESS=0
 FAILED=0
 CLONED=0
 UPDATED=0
-# --------------------------------------------------
-# Début
-# --------------------------------------------------
 echo ""
 echo "=================================================="
 echo "       SYNCHRONISATION DES REPOS CHATVARDAGE"
@@ -31,7 +25,6 @@ echo "=================================================="
 echo ""
 echo "📁 Dossier : $BASE_DIR"
 echo ""
-# Vérification SSH
 echo "🔐 Vérification de la connexion GitHub SSH..."
 if ! ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
    echo ""
@@ -42,18 +35,12 @@ if ! ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
    echo ""
 fi
 echo ""
-# --------------------------------------------------
-# Repos
-# --------------------------------------------------
 for repo in "${REPOS[@]}"; do
    REPO_PATH="$BASE_DIR/$repo"
    REPO_URL="git@github.com:$GITHUB_ORG/$repo.git"
    echo "--------------------------------------------------"
    echo "📦 $repo"
    echo "--------------------------------------------------"
-   # --------------------------------------------------
-   # Repo absent -> clone
-   # --------------------------------------------------
    if [ ! -d "$REPO_PATH" ]; then
        echo "📥 Repo absent."
        echo "   Clonage depuis :"
@@ -72,9 +59,6 @@ for repo in "${REPOS[@]}"; do
        echo ""
        continue
    fi
-   # --------------------------------------------------
-   # Dossier présent mais pas Git
-   # --------------------------------------------------
    if [ ! -d "$REPO_PATH/.git" ]; then
        echo "❌ Le dossier existe mais n'est pas un dépôt Git :"
        echo "   $REPO_PATH"
@@ -82,9 +66,6 @@ for repo in "${REPOS[@]}"; do
        echo ""
        continue
    fi
-   # --------------------------------------------------
-   # Forcer origin vers SSH
-   # --------------------------------------------------
    CURRENT_REMOTE="$(git -C "$REPO_PATH" remote get-url origin 2>/dev/null || true)"
    if [ "$CURRENT_REMOTE" != "$REPO_URL" ]; then
        echo "🔧 Correction de l'URL Git..."
@@ -97,9 +78,6 @@ for repo in "${REPOS[@]}"; do
            continue
        fi
    fi
-   # --------------------------------------------------
-   # Branche actuelle
-   # --------------------------------------------------
    BRANCH="$(git -C "$REPO_PATH" branch --show-current)"
    if [ -z "$BRANCH" ]; then
        echo "❌ Impossible de déterminer la branche actuelle."
@@ -108,17 +86,11 @@ for repo in "${REPOS[@]}"; do
        continue
    fi
    echo "🌿 Branche : $BRANCH"
-   # --------------------------------------------------
-   # Changements locaux
-   # --------------------------------------------------
    if [ -n "$(git -C "$REPO_PATH" status --porcelain)" ]; then
        echo "⚠️  Modifications locales détectées."
    else
        echo "✅ Aucun changement local."
    fi
-   # --------------------------------------------------
-   # Pull
-   # --------------------------------------------------
    echo "⬇️  Pull..."
    if git -C "$REPO_PATH" pull --ff-only; then
        echo "✅ $repo est à jour."
@@ -131,9 +103,6 @@ for repo in "${REPOS[@]}"; do
    fi
    echo ""
 done
-# --------------------------------------------------
-# Résumé
-# --------------------------------------------------
 echo "=================================================="
 echo "                     TERMINÉ"
 echo "=================================================="
