@@ -1,6 +1,6 @@
 # Revues automatiques GitHub
 
-Les workflows `.github/workflows/claude-review.yml` essaient Claude, puis Copilot si aucune revue n'a été publiée. Le dernier recours Codex est limité aux dépôts privés et aux PR issues du même dépôt ; il utilise l'environnement GitHub `codex-review`. Un job vert avec `continue-on-error` ne prouve pas qu'une revue a été publiée : vérifier le commentaire et les journaux.
+Les workflows `.github/workflows/claude-review.yml` essaient Claude, puis Copilot si aucune revue n'a été publiée. Le dernier recours Codex est limité aux PR issues du même dépôt, public ou privé ; il utilise l'environnement GitHub `codex-review`. Un quota Copilot dépassé fait échouer l'étape de revue et déclenche Codex, même si `continue-on-error` laisse le job Copilot vert. Le relais vérifie l'échec de la commande et celui de la publication. Une PR de fork ou un workflow annulé ne lance pas Codex.
 
 ## Secrets
 
