@@ -31,7 +31,7 @@ AUTH_CLIENTS="A26_5A6_01-Room-Service A26_5A6_01-Message-Service"
 CLIENTS_REACT="A26_5A6_01-Mobile A26_5A6_01-Frontend"
 SECRETS="A26_5A6_01-Room-Service A26_5A6_01-Message-Service A26_5A6_01-User-Config-Service"
 
-# shellcheck disable=SC2086 # listes de dépôts séparées par des espaces
+# shellcheck disable=SC2086
 verifier client-auth.ts $AUTH_CLIENTS
 # shellcheck disable=SC2086
 verifier client-auth.spec.ts $AUTH_CLIENTS

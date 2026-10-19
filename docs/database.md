@@ -25,7 +25,7 @@ PostgreSQL est la source de vérité. Redis Pub/Sub/WebSocket sert à diffuser l
 
 ## Schémas métier de référence
 
-Instantané des modèles Prisma au 1er octobre 2026 (état de lecture de Message-Service ajouté le 6 octobre 2026). Les migrations SQL des dépôts propriétaires restent exécutables et font autorité (notamment l’index fonctionnel de courriel Auth). Aucune clé étrangère ne traverse les bases.
+Modèles Prisma de chaque service (sans les blocs `generator` et `datasource`). Les migrations SQL des dépôts propriétaires restent exécutables et font autorité (notamment l’index fonctionnel de courriel Auth). Aucune clé étrangère ne traverse les bases.
 
 ### Authentification
 
@@ -33,51 +33,32 @@ Instantané des modèles Prisma au 1er octobre 2026 (état de lecture de Message
 
 ```prisma
 model Utilisateur {
-  // `dbgenerated("gen_random_uuid()")`, pas `@default(uuid())` : ce dernier
-  // génère l'UUID côté client Prisma, jamais appelé au runtime dans ce
-  // service (voir en-tête de fichier) — la colonne aurait alors une
-  // contrainte NOT NULL sans aucune valeur par défaut côté PostgreSQL, et
-  // l'INSERT de src/infrastructure/pg_utilisateur_repository.rs (qui ne
-  // fournit pas `id`) échouerait. `gen_random_uuid()` est une fonction
-  // native de PostgreSQL depuis la version 13, aucune extension requise.
   id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   pseudo             String   @unique
-  // ⚠️ `@unique` déclare ici un index btree standard (sensible à la
-  // casse) — mais la migration `index_courriel_insensible_a_la_casse`
-  // (prisma/migrations/) l'a remplacé en base par un index UNIQUE
-  // fonctionnel sur LOWER(courriel), pour que l'unicité soit garantie
-  // par PostgreSQL indépendamment de la discipline applicative
-  // (AuthService normalise déjà en minuscules avant chaque écriture —
-  // voir pg_utilisateur_repository.rs). Prisma ne modélise pas les index
-  // fonctionnels/expression : cette annotation reste donc « fausse » au
-  // sens strict (documentation seulement) — ne pas relancer `prisma
-  // migrate dev` sur ce modèle sans relire attentivement le SQL généré,
-  // qui pourrait proposer de revenir à un index standard sur `courriel`.
   courriel           String   @unique
   mot_de_passe_hache String
   version_auth       Int      @default(0)
   role               String   @default("utilisateur")
-  // `@db.Timestamptz` (avec fuseau) sur les deux colonnes : le code Rust
-  // lit ces colonnes dans `chrono::DateTime<Utc>` (voir
-  // src/domain/utilisateur.rs), qui correspond au type PostgreSQL
-  // `timestamptz` — pas `timestamp` (le défaut de Prisma pour `DateTime`
-  // sans cette annotation), qui se décoderait comme `NaiveDateTime` côté
-  // SQLx et ferait échouer chaque requête à l'exécution.
-  //
-  // Pas de `@updatedAt` sur `modifie_le` : cette directive Prisma ne met à
-  // jour la colonne que via le client Prisma (jamais appelé ici, voir
-  // en-tête de fichier) — sans effet côté base de données. `modifie_le`
-  // a donc un simple défaut `now()` comme `cree_le`, et c'est le SQL de
-  // `pg_utilisateur_repository.rs` qui la remet à jour explicitement
-  // (`SET modifie_le = now()`) à chaque UPDATE.
   cree_le            DateTime @default(now()) @db.Timestamptz
   modifie_le         DateTime @default(now()) @db.Timestamptz
+  sessions           SessionRefresh[]
 
-  // Créé par la migration `index_utilisateurs_cree_le` (GET /api/users trie
-  // par cree_le DESC) : déclaré ici pour que Prisma ne propose pas de le
-  // supprimer.
   @@index([cree_le(sort: Desc)], map: "utilisateurs_cree_le_idx")
   @@map("utilisateurs")
+}
+
+model SessionRefresh {
+  hache String @id
+  famille String @db.Uuid
+  utilisateur_id String @db.Uuid
+  utilisateur Utilisateur @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
+  version_auth Int
+  expire_le DateTime @default(dbgenerated("(now() + interval '30 days')")) @db.Timestamptz
+  consomme Boolean @default(false)
+  revoque Boolean @default(false)
+  @@index([famille], map: "sessions_refresh_famille_idx")
+  @@index([expire_le], map: "sessions_refresh_expire_le_idx")
+  @@map("sessions_refresh")
 }
 ```
 
@@ -104,10 +85,7 @@ enum ChannelWrite {
 model Server {
   id          String             @id @default(uuid())
   name        String
-  // Image en data URL (même format que l'avatar de User-Config-Service).
   icon        String?
-  // null uniquement pour le serveur par défaut « Chatvardage », géré par
-  // les administrateurs globaux (voir src/servers/default-server.ts).
   ownerId     String?
   isPublic    Boolean            @default(false)
   isDefault   Boolean            @default(false)
@@ -171,6 +149,7 @@ model PrivateMessage {
   content     String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  deliveredAt DateTime?
 
   @@index([senderId, recipientId, createdAt])
   @@index([recipientId, senderId, createdAt])
@@ -192,13 +171,13 @@ enum ConversationKind {
   room
 }
 
-// État de lecture (messages non lus) ; targetId = interlocuteur ou salon.
 model ConversationReadState {
-  userId     String
-  kind       ConversationKind
-  targetId   String
-  lastReadAt DateTime
-  updatedAt  DateTime         @updatedAt
+  userId            String
+  kind              ConversationKind
+  targetId          String
+  lastReadAt        DateTime
+  lastReadMessageId String?
+  updatedAt         DateTime         @updatedAt
 
   @@id([userId, kind, targetId])
   @@index([kind, targetId])
@@ -239,8 +218,6 @@ model ConfigUtilisateur {
   statutPresence   StatutPresence    @default(horsLigne)
   vuLaDerniereFois DateTime?
   modeNotification ModeNotification  @default(systeme)
-  // Image de profil en data URL (PNG/JPEG/WebP en base64), déjà
-  // redimensionnée côté Frontend — voir MettreAJourConfigDto.avatar.
   avatar           String?
   creeLe           DateTime          @default(now())
   misAJourLe       DateTime          @default(now()) @updatedAt

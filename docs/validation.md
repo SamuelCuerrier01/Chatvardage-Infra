@@ -6,7 +6,7 @@ Une commande réussie est une preuve uniquement pour la révision et l’environ
 
 ## Installation propre, sans effacer les données de travail
 
-Cloner les huit révisions à valider dans un dossier distinct. Générer une configuration Compose de validation avec un nom de projet différent, des noms de conteneurs/réseaux uniques, des volumes neufs et des ports libres. Le `container_name` et le nom du réseau du Compose racine étant fixes, **`-p` seul ne suffit pas** à isoler deux stacks.
+Cloner les révisions à valider dans un dossier distinct. Générer une configuration Compose de validation avec un nom de projet différent, des noms de conteneurs/réseaux uniques, des volumes neufs et des ports libres. Le `container_name` et le nom du réseau du Compose racine étant fixes, **`-p` seul ne suffit pas** à isoler deux stacks.
 
 Suivre exactement le README (génération du `.env` incluse), construire les images, attendre les healthchecks, puis contrôler :
 
@@ -41,6 +41,23 @@ Vérifier les migrations sur les quatre bases neuves. Redémarrer sans supprimer
 | 15 | Redémarrer Message-Service sans supprimer les volumes | Mêmes compteurs de non-lus qu'avant le redémarrage |
 | 16 | B cherche un mot présent dans un DM entre A et C et dans un salon commun | Seul le message du salon commun est trouvé ; pages suivantes sans doublon |
 | 17 | A écrit à B ; B ouvre la conversation | Chez A, ✓ puis ✓✓ et « Lu à … » sans recharger ; chez B, « Nouveaux messages » au premier non-lu |
+
+## Scénario mobile
+
+Deux comptes sur deux téléphones (Expo Go), backend de la stack Infra. Les commandes et la cible déclarée sont dans le [README Mobile](https://github.com/Chatvardage/A26_5A6_01-Mobile#cible-test%C3%A9e) ; les résultats sont rangés dans son dossier [`docs/preuves`](https://github.com/Chatvardage/A26_5A6_01-Mobile/tree/develop/docs/preuves).
+
+| Étape | Manipulation | Résultat attendu |
+|---|---|---|
+| M1 | `npx expo start`, connexion sur chaque téléphone | Listes de messages privés et de serveurs chargées |
+| M2 | Ouvrir une conversation par sa route (`Conversation { conversationId }`) | Historique chargé ; un identifiant invalide affiche une erreur sans appel API |
+| M3 | A écrit à B pendant que B est sur une autre conversation | Pastille de non-lus de B incrémentée ; notification (iPhone) ou pastille (Android Expo Go) ouvre la bonne conversation |
+| M4 | Redémarrer l'application de B | Même compteur de non-lus |
+| M5 | A modifie son message | B voit la nouvelle version et « modifié » sans recharger |
+| M6 | Remonter une conversation de plus de 50 messages | Page plus ancienne chargée, ordre conservé, aucun doublon |
+| M7 | Rechercher un mot | Seules les conversations accessibles sont trouvées ; toucher un résultat ouvre le message |
+| M8 | Couper le réseau de B, A envoie, B tente d'envoyer | Bandeau hors ligne chez B, texte non envoyé conservé |
+| M9 | Rétablir le réseau de B | Canal temps réel rétabli, messages manqués récupérés par REST |
+| M10 | `npm test` et `npm run test:integration` dans Mobile | Tests verts, couverture à 100 % |
 
 Utiliser des comptes et salons jetables pour les suppressions. La suppression du dernier salon et celle du serveur par défaut sont volontairement refusées.
 

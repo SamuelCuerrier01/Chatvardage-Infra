@@ -13,6 +13,7 @@ REPOS=(
    "A26_5A6_01-Authentification"
    "A26_5A6_01-User-Config-Service"
    "A26_5A6_01-Dashboard"
+   "A26_5A6_01-Mobile"
 )
 SUCCESS=0
 FAILED=0

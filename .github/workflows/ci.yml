@@ -25,7 +25,6 @@ jobs:
           node-version: 22
       - name: Tester les scripts Infra
         run: node --test scripts/tests/*.test.cjs
-      # shellcheck est préinstallé sur les runners ubuntu-latest.
       - run: shellcheck scripts/*.sh postgres/init/*.sh
 
   fichiers-partages:

@@ -11,6 +11,7 @@
 | [Message-Service](https://github.com/Chatvardage/A26_5A6_01-Message-Service) | 1.0.0 | `v1.0.0` |
 | [User-Config-Service](https://github.com/Chatvardage/A26_5A6_01-User-Config-Service) | 1.0.0 | `v1.0.0` |
 | [Dashboard](https://github.com/Chatvardage/A26_5A6_01-Dashboard) | 1.0.0 | `v1.0.0` |
+| [Mobile](https://github.com/Chatvardage/A26_5A6_01-Mobile) | 1.0.0 (`package.json` et `app.json`) | `v1.0.0` |
 | [Infra](https://github.com/Chatvardage/A26_5A6_01-Infra) | sans package.json | `v1.0.0` |
 
 Les tags indiqués sont les noms attendus pour les versions déclarées; cette table ne confirme pas leur publication. Infra possède un tag propre à la configuration et à la documentation, sans package.json.

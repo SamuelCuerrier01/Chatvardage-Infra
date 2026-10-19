@@ -1,4 +1,4 @@
-name: chatvardage-c2
+name: chatvardage
 
 services:
   generer-env:
@@ -454,4 +454,6 @@ networks:
 
 volumes:
   postgres_data:
+    name: chatvardage-c2_postgres_data
   redis_data:
+    name: chatvardage-c2_redis_data

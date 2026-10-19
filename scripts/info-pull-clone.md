@@ -1,8 +1,8 @@
 Guide — Script pull-clone-all.sh
-Ce guide explique comment utiliser le script pull-clone-all.sh du repo Infra pour synchroniser automatiquement les 8 repos du projet Chatvardage.
+Ce guide explique comment utiliser le script pull-clone-all.sh du repo Infra pour synchroniser automatiquement les 9 repos du projet Chatvardage.
 
 1. À quoi sert le script ?
-Le script permet de gérer automatiquement les 8 repos suivants :
+Le script permet de gérer automatiquement les 9 repos suivants :
 ● A26_5A6_01-Infra
 ● A26_5A6_01-Frontend
 ● A26_5A6_01-Room-Service
@@ -11,6 +11,7 @@ Le script permet de gérer automatiquement les 8 repos suivants :
 ● A26_5A6_01-Authentification
 ● A26_5A6_01-User-Config-Service
 ● A26_5A6_01-Dashboard
+● A26_5A6_01-Mobile
 Pour chaque repo :
 ● s’il existe déjà, le script fait un git pull --ff-only;
 ● s’il n’existe pas, le script le clone automatiquement;
@@ -190,7 +191,7 @@ bash -x scripts/pull-clone-all.sh
 Une fois la configuration terminée, il suffit normalement de faire :
 cd /mnt/c/chatvardage/A26_5A6_01-Infra
 ./scripts/pull-clone-all.sh
-Le script s’occupe ensuite de synchroniser les 8 repos automatiquement.
+Le script s’occupe ensuite de synchroniser les 9 repos automatiquement.
 
 14. Ajouter un nouveau repo
 Pour ajouter un repo au script, ajouter simplement son nom dans le tableau REPOS.
