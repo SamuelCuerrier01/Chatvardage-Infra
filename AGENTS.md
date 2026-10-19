@@ -74,3 +74,6 @@ Documentation des contrats :
 - **Interlocuteur inexistant** : état vide, pas de 404 inventé ; 400 concerne un `messageId` hors conversation.
 - **Couverture Auth** : seuil de 99 % ; aucun test artificiel pour combler l'écart restant.
 - **`logout-others`** : un 401 reste possible après invalidation si le compte disparaît avant la relecture (`AuthService::deconnecter_autres`).
+
+- **Prérequis AppArmor du job de revue** : le profil provient du paquet installé sur Ubuntu 24.04 et son chargement est vérifié avant toute restauration des identifiants. Un profil manquant doit faire échouer le job ; continuer sans lui affaiblirait l’isolation pour une panne amont hypothétique.
+- **Revues sur dépôt public** : Codex doit prendre le relais pour les PR internes après échec de Copilot. Les forks restent exclus et les secrets restent dans l’environnement dédié ; une approbation manuelle systématique n’est pas imposée, car elle bloquerait le suivi automatique demandé.

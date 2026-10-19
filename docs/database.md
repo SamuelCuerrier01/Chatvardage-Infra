@@ -56,6 +56,7 @@ model SessionRefresh {
   expire_le DateTime @default(dbgenerated("(now() + interval '30 days')")) @db.Timestamptz
   consomme Boolean @default(false)
   revoque Boolean @default(false)
+  @@index([utilisateur_id], map: "sessions_refresh_utilisateur_id_idx")
   @@index([famille], map: "sessions_refresh_famille_idx")
   @@index([expire_le], map: "sessions_refresh_expire_le_idx")
   @@map("sessions_refresh")
