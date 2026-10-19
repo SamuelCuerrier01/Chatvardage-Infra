@@ -222,6 +222,7 @@ Architecture multiservice : Electron et l’application mobile passent par un Ga
 - [Guides détaillés par dépôt](docs/services/README.md)
 - [Validation, démonstration et résultats](docs/validation.md)
 - [Versions et publication](docs/versions.md)
+- [Configuration et dépannage des revues GitHub](docs/revues-github.md)
 - [Synchronisation facultative des clones](scripts/info-pull-clone.md)
 
 ## CI Infra
