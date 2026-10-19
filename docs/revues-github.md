@@ -22,3 +22,7 @@ Si une approbation protège l'environnement `codex-review`, le job attend cette 
 Relancer le workflow de revue du HEAD courant depuis Actions. Vérifier qu'un commentaire est effectivement publié pour cette révision, puis traiter ses observations. Une revue d'une ancienne révision ou une étape sautée ne valide pas un nouveau commit.
 
 Les actions qui manipulent ces secrets restent épinglées par SHA et les CLI par version exacte. Pour les mettre à jour, vérifier le tag dans leur dépôt officiel et la version du paquet, puis modifier les références ensemble.
+
+## Sandbox Linux de Codex
+
+Le job Codex utilise Ubuntu 24.04 et installe `bubblewrap` ainsi que le profil AppArmor `bwrap-userns-restrict` avant de restaurer ses identifiants. Un essai de lecture d'`AGENTS.md` dans un namespace sans réseau vérifie le prérequis avant la revue. La revue garde `--sandbox read-only` ; aucune restriction AppArmor globale n'est désactivée. Voir les [prérequis officiels du sandbox](https://learn.chatgpt.com/docs/sandboxing#prerequisites).
