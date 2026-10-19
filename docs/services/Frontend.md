@@ -361,3 +361,5 @@ Autres mesures :
 - La fenêtre sans cadre ne propose pas le menu système natif (clic droit
   sur la barre de titre) ; les raccourcis clavier du système restent actifs.
 - Les builds macOS/Windows/Linux sont générés par leurs runners respectifs dans GitHub Actions.
+
+La déconnexion locale et le retour à la connexion n’attendent pas la révocation HTTP, envoyée en arrière-plan. Le renouvellement automatique reste suspendu pendant une rotation explicite ; une réponse de renouvellement antérieure ne remplace pas les jetons issus de cette rotation.
