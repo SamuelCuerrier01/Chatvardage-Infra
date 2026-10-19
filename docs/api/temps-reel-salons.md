@@ -112,6 +112,8 @@ L'événement `typing` `{ scope: 'room' | 'dm', targetId, isTyping }` est **éph
 
 Le payload réémis est `{ userId, scope, targetId, isTyping }`, où `userId` provient de l'identité authentifiée du socket émetteur (jamais du payload client).
 
+Les répétitions du même état sont espacées d’une seconde par cible. Le cache de déduplication garde au plus 1 000 cibles par socket, avec remplacement de la plus ancienne lors de l’ajout d’une nouvelle cible ; les changements d’état restent relayés immédiatement.
+
 ## Accusés de lecture
 
 Quand un utilisateur marque une conversation comme lue et que son état avance (`PUT …/read`), Message-Service écrit d'abord l'état en base, puis publie `read-state.updated` sur Redis. L'événement `{ kind, targetId, userId, lastReadAt, lastReadMessageId }` est émis à la room `room:<salon>` (sockets qui ont rejoint le salon). Même chemin que les messages : `DB -> Redis PUBLISH -> Redis SUBSCRIBE -> Socket.IO`.

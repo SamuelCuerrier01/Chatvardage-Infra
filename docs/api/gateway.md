@@ -178,3 +178,5 @@ Un client qui n'a pas fini d'envoyer son corps de requête après `PROXY_TIMEOUT
 Toutes les réponses du Gateway portent `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` et `Referrer-Policy: strict-origin-when-cross-origin`, sauf si le service interne fournit lui-même ces en-têtes.
 
 Toutes les erreurs fonctionnelles renvoyées par Auth/Room/Message/User-Config sont transmises avec leur code d'origine. Lors de l'accès à User-Config, une réponse de refus d'Auth est également relayée telle quelle.
+
+Un upgrade WebSocket avec une URL malformée est rejeté par le Gateway avec `400` et fermeture de connexion. Un upgrade hors `/socket.io` reçoit `404` puis est fermé ; il n’est jamais transféré à Message-Service.

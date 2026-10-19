@@ -84,12 +84,13 @@ Les essais utilisent le projet Docker `chatvardage-security-review` avec volumes
 
 Depuis Infra, utiliser les commandes documentées dans le README : bootstrap des fichiers dérivés, build --pull des neuf services affectés, up --wait en respectant les dépendances puis healthcheck. Aucun down ni retrait des volumes n'est requis. Les clients Electron/Mobile doivent être reconstruits et distribués séparément avec leur configuration HTTPS définitive.
 
-## Actualisation Auth — review 6078856455
+## Image Auth Alpine (rescan)
 
-La ligne Auth/Trivy ci-dessus est le résultat historique de l’image Debian. La nouvelle image de la PR Auth #10 compile avec musl et utilise Node 22 Alpine mis à jour. Docker Scout, sans filtre de sévérité, de correctif ou d’image de base, y indexe 64 paquets et ne détecte aucune vulnérabilité le 9 octobre 2026. Les migrations réelles, la santé, le refus sans JWT et l’exécution sans root ont été vérifiés sur un conteneur temporaire et une base de test isolée; aucun volume applicatif n’a été supprimé. L’image en cours d’exploitation n’est pas remplacée par ces essais. Les autres lignes et limites de déploiement restent des résultats historiques à revérifier.
+La ligne Auth/Trivy du tableau initial concerne l'ancienne image Debian. L'image actuelle compile Rust avec musl et tourne sur Node 22 Alpine sous l'utilisateur `node`, sans npm ni npx ; elle applique les migrations par `./node_modules/.bin/prisma migrate deploy`.
 
-Les bases et méthodes de Scout et Trivy diffèrent : leurs totaux ne doivent pas être comparés directement. Le tableau Trivy initial ci-dessus reste historique; une analyse de la même image avec Trivy complète les résultats ci-dessous. La couverture courante 99,75 % était déjà mesurée après le correctif de rôle identique avant cette projection publique; seuil 99 % et scénarios réels de révocation conservés.
+| Outil | Résultat (9 octobre 2026) |
+|---|---|
+| Docker Scout, sans filtre | 64 paquets indexés, aucune vulnérabilité |
+| Trivy 0.75.0, base actualisée le même jour | 0 critique, 0 élevée, 0 modérée, 0 faible |
 
-Rescan comparable : Trivy 0.75.0, image Auth Alpine du commit c518bb0, base de vulnérabilités actualisée le 9 octobre 2026 : 0 critiques, 0 élevées, 0 modérées, 0 faibles, 0 inconnues. Aucun filtre de sévérité ni de correctif. Ce résultat complète le tableau historique sans modifier les anciens constats.
-
-La commande directe Prisma du bilan initial décrit les images de ce premier scan; Auth utilise maintenant le point d’entrée déclaré `./node_modules/.bin/prisma`, conformément au guide actualisé. La couverture 99,75 % était déjà constatée avant c518bb0 : les valeurs 99,77 et 99,75 proviennent de deux validations successives, pas d’une régression de cette projection.
+Les deux outils n'ont pas la même base : leurs totaux ne se comparent pas directement. Migrations, santé, refus sans JWT et exécution sans root ont été vérifiés sur un conteneur et une base de test isolés. La couverture Rust est de 99,75 % des lignes hors `main.rs`, pour un seuil de 99 %.

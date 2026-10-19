@@ -1,22 +1,23 @@
 # Rapport de validation
 
-Validation locale du 1er octobre 2026, depuis les révisions de développement. Les vérifications automatisées ont été refaites le 2 octobre 2026 sur `develop`, avec un `npm ci` neuf. Les résultats ci-dessous distinguent les vérifications exécutées des éléments restant à démontrer.
+Vérifications automatisées refaites le 18 octobre 2026 sur les branches de nettoyage ; validation de la stack intégrée du 1er octobre 2026. Les résultats ci-dessous distinguent les vérifications exécutées des éléments restant à démontrer.
 
 ## Vérifications automatisées
 
 | Application | Résultat |
 |---|---|
-| Frontend | 226 tests; couverture de 100 % sur le périmètre configuré; types, lint et build réussis |
-| Dashboard | 79 tests; couverture de 100 %; types, lint, build et bundle AdminJS réussis |
-| Authentification | 161 tests sur une base PostgreSQL migrée; format et Clippy réussis; couverture des lignes de 99,01 %. `cargo audit` n’a pas été exécuté localement (il tourne dans le CI) |
-| Room-Service | 195 tests unitaires et 14 tests e2e; couverture de 100 % |
-| Message-Service | 291 tests unitaires; couverture de 100 % |
-| User-Config-Service | 83 tests unitaires et 24 tests e2e; couverture de 100 % |
-| Serveur-API | 135 tests unitaires et 6 tests e2e; couverture de 100 % |
+| Mobile | 1064 tests (97 suites) ; couverture de 100 % ; types et lint réussis ; bundle Android exporté ; parcours `test:integration` (19 vérifications) réussi contre la stack locale |
+| Frontend | 408 tests ; couverture de 100 % sur le périmètre configuré ; types et lint réussis |
+| Dashboard | 83 tests ; couverture de 99,7 % (lignes) ; types et lint réussis |
+| Authentification | 185 tests sur une base PostgreSQL migrée ; format et Clippy réussis |
+| Room-Service | 205 tests unitaires et 14 tests e2e ; couverture de 100 % |
+| Message-Service | 394 tests unitaires ; couverture de 100 % |
+| User-Config-Service | 83 tests unitaires et 24 tests e2e ; couverture de 100 % |
+| Serveur-API | 136 tests unitaires et 8 tests e2e ; couverture de 100 % |
 
 Les vérifications npm de compilation et de lint des services passent. Les couvertures reflètent les exclusions et seuils de chaque dépôt; elles ne signifient pas que toutes les interactions système sont couvertes. Le test des notifications exécute le module principal avec Electron simulé.
 
-Les sept vérificateurs de versions acceptent le tag correspondant et rejettent un tag incohérent. Les workflows passent actionlint et les cinq scripts shell Infra passent ShellCheck. `npm audit` (dépendances de dev comprises), relancé le 2 octobre 2026, ne signale aucune vulnérabilité dans six des sept dépôts Node (Authentification compris, pour sa CLI Prisma), et aucune de sévérité haute ou critique dans le Dashboard. Le Dashboard garde des avis de sévérité modérée ou faible sur `@tiptap/*` 2.1.13, épinglé par AdminJS et sans correctif compatible ; le bundle précompilé que sert AdminJS au navigateur embarque aussi toujours `tinymce` 6.8.2 (voir le [guide Dashboard](services/Dashboard.md#dépendances-et-audit)). La CI du Dashboard audite au seuil `high` ; la même étape est ajoutée aux CI des six autres dépôts Node par leurs branches `bugfix/ci-audit-npm`. L’audit Message-Service ne signale aucune vulnérabilité, y compris après l’ajout de Swagger (`js-yaml` forcé en 5.4.2 pour `@nestjs/swagger`).
+Les sept vérificateurs de versions acceptent le tag correspondant et rejettent un tag incohérent. Les workflows passent actionlint et les cinq scripts shell Infra passent ShellCheck. `npm audit` (dépendances de dev comprises), relancé le 2 octobre 2026, ne signale aucune vulnérabilité dans six des sept dépôts Node (Authentification compris, pour sa CLI Prisma), et aucune de sévérité haute ou critique dans le Dashboard. Le Dashboard garde des avis de sévérité modérée ou faible sur `@tiptap/*` 2.1.13, épinglé par AdminJS et sans correctif compatible ; le bundle précompilé que sert AdminJS au navigateur embarque aussi toujours `tinymce` 6.8.2 (voir le [guide Dashboard](services/Dashboard.md#dépendances-et-audit)). Les CI des dépôts Node exécutent `npm audit --audit-level=high` (à titre informatif pour Mobile, dont les avis viennent du SDK Expo). L’audit Message-Service ne signale aucune vulnérabilité, y compris après l’ajout de Swagger (`js-yaml` forcé en 5.4.2 pour `@nestjs/swagger`).
 
 ## Stack et intégration réelle
 

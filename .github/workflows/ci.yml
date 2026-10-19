@@ -1,9 +1,5 @@
 name: CI
 
-# Validation du Compose et des scripts à chaque PR et sur les branches
-# principales, et vérification que les fichiers partagés entre services
-# (src/partage/) n'ont pas divergé.
-
 on:
   pull_request:
   push:
@@ -22,10 +18,6 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      # Valide la syntaxe et l'interpolation (les dépôts des services ne sont
-      # pas nécessaires : aucune image n'est construite).
-      # Le clone propre doit être valide sans .env : le démarrage C2 se fait
-      # directement avec `docker compose up -d`.
       - name: Valider Compose sans .env
         run: docker compose config -q
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
@@ -33,18 +25,13 @@ jobs:
           node-version: 22
       - name: Tester les scripts Infra
         run: node --test scripts/tests/*.test.cjs
-      # shellcheck est préinstallé sur les runners ubuntu-latest.
       - run: shellcheck scripts/*.sh postgres/init/*.sh
 
   fichiers-partages:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      # Jeton en lecture seule sur les dépôts de l'organisation (ils sont
-      # privés) : fine-grained PAT, permission « Contents: read ».
       JETON: ${{ secrets.CHATVARDAGE_REPOS_TOKEN }}
-      # Même branche que cette PR dans les autres dépôts si elle existe,
-      # sinon leur branche par défaut.
       BRANCHE: ${{ github.head_ref || github.ref_name }}
     steps:
       - name: Secret absent

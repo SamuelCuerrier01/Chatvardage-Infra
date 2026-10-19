@@ -1,16 +1,10 @@
 #!/bin/sh
 set -eu
 
-# Usage : ./scripts/verifier-fichiers-partages.sh
-# Vérifie que les fichiers partagés (src/partage/) sont identiques dans tous
-# les dépôts qui les copient. Les dépôts doivent être clonés côte à côte,
-# comme pour docker-compose.yml (../A26_5A6_01-*).
-
 cd "$(dirname "$0")/../.."
 
 echec=0
 
-# $1 : fichier (relatif à src/partage/) ; ensuite : les dépôts qui le copient.
 verifier() {
   fichier=$1
   shift
@@ -34,11 +28,10 @@ verifier() {
 }
 
 AUTH_CLIENTS="A26_5A6_01-Room-Service A26_5A6_01-Message-Service"
-# Hooks et règles React communs au client mobile et au client Web (src/partage/ de chaque dépôt).
 CLIENTS_REACT="A26_5A6_01-Mobile A26_5A6_01-Frontend"
 SECRETS="A26_5A6_01-Room-Service A26_5A6_01-Message-Service A26_5A6_01-User-Config-Service"
 
-# shellcheck disable=SC2086 # listes de dépôts séparées par des espaces
+# shellcheck disable=SC2086
 verifier client-auth.ts $AUTH_CLIENTS
 # shellcheck disable=SC2086
 verifier client-auth.spec.ts $AUTH_CLIENTS

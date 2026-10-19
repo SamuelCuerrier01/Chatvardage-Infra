@@ -31,8 +31,6 @@ test('chaque service ne reçoit que ses secrets, sans rotation du fichier source
     }
     assert.equal(fs.readFileSync(path.join(racine, '.env'), 'utf8'), source);
     assert.equal(fs.statSync(path.join(racine, '.env')).mode & 0o777, 0o600);
-    // Après un bootstrap root, l'opérateur doit pouvoir régénérer ses
-    // fichiers sans sudo. Le parent temporaire appartient à cet opérateur.
     if (process.getuid() === 0) fs.chownSync(racine, uid, gid);
     const deuxieme = spawnSync('sh', [script], { encoding: 'utf8', env, uid, gid });
     assert.equal(deuxieme.status, 0, deuxieme.stderr);

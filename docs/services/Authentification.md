@@ -156,8 +156,7 @@ model Utilisateur {
 }
 ```
 
-Deux détails délibérément différents des exemples Prisma habituels (voir
-les commentaires dans `prisma/schema.prisma` pour le détail) :
+Deux détails délibérément différents des exemples Prisma habituels :
 
 - `dbgenerated("gen_random_uuid()")`, pas `@default(uuid())` : ce dernier
   génère l'UUID côté client Prisma — jamais appelé au runtime ici — donc
@@ -544,10 +543,6 @@ voir [Endpoints de l'API](#endpoints-de-lapi) — sans repasser par SQL.
   l'exécution et pour les tests de `pg_utilisateur_repository` (voir
   [Lancer les tests](#lancer-les-tests)).
 
-## Image Auth renforcée — review 6078856455
+## Image Docker
 
-Rust est compilé statiquement avec musl (musl-dev dans le builder). Les stages Prisma et runtime utilisent Node 22 Alpine; le runtime applique les correctifs disponibles, conserve les fichiers applicatifs propriété de root et lisibles/exécutables par node et démarre sous node (UID 1000). npm/npx sont absents : le point d’entrée public local .bin/prisma, vérifié au build, applique les migrations avant exec du serveur. Une reconstruction avec --pull est nécessaire pour recevoir les nouvelles images de base.
-
-Validation sur base de test isolée : migrations appliquées, HTTP /health 200, /api/users/lookup sans JWT 401, UID 1000 et absence npm/npx. L’analyse Docker Scout complète ne détecte aucune vulnérabilité dans cette image au 9 octobre 2026; ce résultat daté ne garantit pas les versions futures. La couverture Rust reste 99,75 % des lignes hors main. Le CI construit maintenant l’image après les contrôles Rust.
-
-La couverture passe de 99,77 % (bilan initial) à 99,75 % dans la validation déjà effectuée du rôle identique; le seuil requis de 99 % est conservé et les scénarios PostgreSQL de changement réel et de rôle identique passent. Les lignes défensives restantes ne sont pas masquées.
+Rust est compilé statiquement avec musl (`musl-dev` dans le builder). Les stages Prisma et runtime utilisent Node 22 Alpine ; le runtime applique les correctifs disponibles, garde les fichiers applicatifs propriété de root et lisibles par `node`, et démarre sous `node` (UID 1000). npm et npx sont absents : `./node_modules/.bin/prisma`, vérifié au build, applique les migrations avant de lancer le serveur. Reconstruire avec `--pull` pour recevoir les nouvelles images de base. Le CI construit l'image après les contrôles Rust ; la couverture exigée est de 99 % des lignes hors `main.rs`.

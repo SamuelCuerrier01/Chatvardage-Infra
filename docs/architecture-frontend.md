@@ -31,21 +31,9 @@ Un seul processus (`main.js` et ses modules `src/main/`) détient l'état métie
 instance de `RealGatewayRuntime`, partagée par toutes les pages : naviguer
 d'une page à l'autre ne perd ni la session ni les préférences.
 
-### Passage du gateway simulé au gateway réel
+### Une seule implémentation du gateway
 
-En version 1.x (tags `v1.0.0` et `v1.0.1`), le processus principal créait
-déjà une instance unique, `new MockGatewayRuntime()`, qui implémentait le
-contrat `ChatGateway` et simulait le serveur en mémoire. Les pages ne la
-voyaient qu'à travers les canaux IPC exposés par `preload.js`.
-
-La version 2.0.0 garde ce découpage. Le processus principal crée maintenant
-`new RealGatewayRuntime(configurationApi)` (`src/main/gateway.js`), qui parle
-au Serveur-API en HTTP et Socket.IO. Les pages continuent d'appeler des
-canaux IPC (`reseau:etat`, `presence:obtenir`, etc.) : elles ne savent pas
-quelle implémentation répond. Le mock, `MockGateway.ts` et l'interface
-TypeScript `ChatGateway` ont ensuite été retirés : il ne reste qu'une
-implémentation, celle qui est exécutée. Les tests unitaires remplacent le
-réseau par des doublures.
+Le processus principal crée une instance unique, `new RealGatewayRuntime(configurationApi)` (`src/main/gateway.js`), qui parle au Serveur-API en HTTP et Socket.IO. Les pages n'y accèdent que par les canaux IPC exposés par `preload.js` (`reseau:etat`, `presence:obtenir`, etc.). Les tests unitaires remplacent le réseau par des doublures.
 
 ## Arborescence
 
@@ -231,12 +219,9 @@ renvoie `fenetre:maximisee` pour l'icône agrandir/restaurer. À chaque
 redimensionnement, `appliquerZoomAdaptatif` ajuste le zoom (100 % à
 135 %).
 
-**Session expirée.** Sur un 401 pendant une session ouverte,
-`RealGatewayRuntime` revérifie le jeton (`GET /api/auth/me`) — un 401 peut
-aussi vouloir dire « mot de passe actuel incorrect ». Si le jeton est
-refusé, la session est fermée et `session-expiree` est émis : `main.js`
-ramène la fenêtre à l'écran de connexion, qui l'explique
-(`navigation:motif-retour-connexion`).
+**Renouvellement de session.** Les jetons d’accès (15 minutes) et de renouvellement restent dans le processus principal et sont persistés ensemble, chiffrés par `safeStorage`. Sur un 401, le client partage une seule rotation via `POST /api/auth/refresh` entre les requêtes concurrentes, puis rejoue chaque requête une fois avec le nouvel accès. Un refus de renouvellement ferme la session et émet `session-expiree`. Un ancien fichier contenant seulement l’accès reste lisible ; la prochaine connexion ajoute le renouvellement. Sans coffre sécurisé, aucun jeton n’est conservé sur disque.
+
+**Déconnexion et changement de compte.** Le client efface immédiatement sa session locale et demande la révocation de sa famille via `POST /api/auth/logout`, même si cet appel peut échouer hors ligne. Les réponses HTTP et événements du socket précédent ne modifient pas la session suivante. « Déconnecter les autres appareils » conserve les deux nouveaux jetons reçus d’Auth.
 
 **Messages non lus.** Les compteurs viennent de Message-Service
 (`messages:non-lus` → `GET /api/messages/unread`), chargés à l'ouverture de
@@ -257,15 +242,24 @@ sous le dernier message. L'événement Socket.IO `read-state.updated`, relayé
 par `messages:lecture-change`, les met à jour en direct ; lu depuis un autre
 de mes appareils, il fait relire les compteurs de non-lus.
 
+**Synchronisation des compteurs et des lectures.** Le serveur fait foi :
+
+- Après chaque message reçu d'autrui et chaque suppression, les deux pages relisent les non-lus par HTTP ; l'incrément local n'est que provisoire et aucun décrément local n'est fait. Une réponse dépassée par une requête plus récente est ignorée.
+- Le marquage comme lu transmet l'identifiant du dernier message enregistré **affiché** (jamais un brouillon non livré) : un message arrivé côté serveur mais pas encore rendu reste non lu. Il n'a lieu que si la conversation est affichée au premier plan.
+- La position de lecture `(lastReadAt, lastReadMessageId)` est fusionnée de façon monotone entre réponses HTTP et événements temps réel, pour les coches comme pour « Vu par ». À date égale, les identifiants sont comparés dans l'ordre du serveur `(createdAt, id)`. Un événement dont la date n'est pas interprétable est ignoré.
+- Chaque ouverture de conversation a son propre état d'historique : les réponses, erreurs et pagination d'une ouverture précédente sont ignorées. Un saut vers un résultat de recherche attend la page en cours et s'arrête si la conversation change.
+- L'interface affiche « Lu », pas une heure : le contrat expose la position du dernier message lu, pas l'heure de l'action de lecture.
+
 **Recherche.** Le bouton « Rechercher » des deux pages ouvre le dialogue
 `#search-dialog` (`ChatUiShared.brancherRechercheMessages`,
 `messages:rechercher` → `GET /api/messages/search?conversationId=…`). La
 recherche porte uniquement sur la conversation affichée : le salon actif, ou
 la conversation privée ouverte. Changer de conversation remet le dialogue à
 zéro ; sans conversation affichée, le champ est désactivé. Un clic sur un
-résultat charge l'historique plus ancien jusqu'au message (pages de 100,
-20 au plus, sans trou), fait défiler jusqu'à lui et le met en évidence
-quelques secondes (`ChatUiShared.allerAuMessageAffiche`).
+résultat charge directement la page qui commence au message (`around`), fait
+défiler jusqu'à lui et le met en évidence quelques secondes
+(`ChatUiShared.allerAuMessageAffiche`) ; la pagination reprend ensuite vers
+les messages plus anciens (`cursor`) ou plus récents (`direction=after`).
 
 **Fiche de profil.** Un clic (ou Entrée/Espace) sur la photo d'un autre
 utilisateur ouvre sa fiche (`ChatUiShared.ouvrirFicheProfil`, contenu calculé
@@ -297,7 +291,7 @@ réinterroge pas les autres utilisateurs tant que le temps réel est actif.
 ## Sécurité
 
 `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`,
-`webviewTag: false`. Jeton de session chiffré par le système
+`webviewTag: false`. Jetons d’accès et de renouvellement chiffrés par le système
 (`safeStorage`) dans un fichier `0600`. Chaque canal IPC est déclaré explicitement dans
 `preload.js` et `main.js`, qui vérifie la provenance de l'appel. Les
 messages sont affichés par `textContent` / création DOM, jamais par

@@ -1,8 +1,6 @@
 #!/bin/sh
 set -eu
 
-# Copie seulement les variables nécessaires à chaque service. Aucun nouveau
-# secret : le .env existant reste la source et les bases gardent leurs mots de passe.
 SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 INFRA_DIR=$(dirname "$SCRIPT_DIR")
 SOURCE="$INFRA_DIR/.env"
@@ -16,11 +14,8 @@ preparer() {
   service=$1
   cles=$2
   mkdir -p "$RUNTIME/$service"
-  # Le conteneur non privilégié peut lire son seul dossier monté.
   chmod 755 "$RUNTIME/$service"
   temporaire="$RUNTIME/$service/.env.tmp"
-  # Le fichier généré suit le format CLÉ=valeur, sans préfixe export ni
-  # espace avant la clé; conserver ce format lors des éditions manuelles.
   awk -F= -v cles="$cles" '
     BEGIN { n = split(cles, noms, " "); for (i = 1; i <= n; i++) permis[noms[i]] = 1 }
     permis[$1] { sub(/\r$/, ""); print }
@@ -41,7 +36,6 @@ preparer serveur-api "$commun INTERNAL_SERVICE_TOKEN AUTH_SERVICE_URL ROOM_SERVI
 
 chmod 600 "$SOURCE"
 if [ "$(id -u)" = 0 ]; then
-  # Alpine bootstrap tourne en root; conserver l'accès de l'opérateur Linux.
   chown "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}" "$SOURCE"
   chown -R "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}" "$RUNTIME"
 fi

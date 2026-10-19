@@ -1,9 +1,6 @@
-name: chatvardage-c2
+name: chatvardage
 
 services:
-  # Bootstrap C2 : sur un clone propre, `docker compose up -d` exécute
-  # réellement scripts/generer-env.sh avant de démarrer la stack. Un .env
-  # existant est conservé afin que les secrets restent stables.
   generer-env:
     image: alpine:3.22
     container_name: chatvardage-generer-env
@@ -84,9 +81,6 @@ services:
     networks:
       - chatvardage
 
-  # Outil générique d'administration BD (dev uniquement). Ce n'est pas le Dashboard AdminJS.
-  # Pas de profil Compose : toute la stack est un environnement de dev lié à 127.0.0.1
-  # (voir docs/architecture.md, « Choix d'orchestration »).
   adminer:
     image: chatvardage-adminer:6.1.1
     build:
@@ -115,10 +109,7 @@ services:
     restart: unless-stopped
 
     environment:
-      # Lu par redis-cli (healthcheck ci-dessous et scripts/healthcheck.sh) : le mot de
-      # passe n'est jamais interpolé dans une commande shell.
       REDISCLI_AUTH: ${REDIS_PASSWORD:-chatvardage_redis_dev}
-
 
     ports:
       - "127.0.0.1:6379:6379"
@@ -156,7 +147,6 @@ services:
     restart: unless-stopped
 
     environment:
-      # production : refuse de démarrer avec les secrets de dev (voir .env.example).
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 3001
 
@@ -167,13 +157,7 @@ services:
       JWT_DUREE_DE_VIE_HEURES: ${JWT_DUREE_DE_VIE_HEURES:-24}
       RUST_LOG: ${RUST_LOG:-info}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
-      # Compte supprimé : ces services effacent ses données
-      # (DELETE /api/internal/users/:id). Pas de depends_on : l'appel est
-      # fait en tâche de fond, avec nouvelles tentatives.
       SERVICES_COMPTE_SUPPRIME_URLS: http://room-service:3003,http://message-service:3004,http://user-config-service:3005
-      # Sessions d'un compte invalidées (mot de passe changé, déconnexion de
-      # tous ou des autres appareils, rôle changé, compte supprimé) :
-      # Message-Service ferme aussitôt les sockets au jeton révoqué.
       SERVICES_SESSIONS_REVOQUEES_URLS: http://message-service:3004
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-chatvardage_internal_dev}
 
@@ -190,7 +174,6 @@ services:
       postgres:
         condition: service_healthy
 
-    # Ce healthcheck remplace le HEALTHCHECK du Dockerfile d'Auth-Service.
     healthcheck:
       test:
         [
@@ -215,8 +198,6 @@ services:
     restart: unless-stopped
 
     environment:
-      # Environnement Docker local du C2 : les services communiquent sur le réseau privé
-      # Compose en HTTP. Le Room-Service réserve l’exigence HTTPS à la production réelle.
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 3003
 
@@ -226,12 +207,7 @@ services:
       AUTH_SERVICE_URL: http://auth-service:3001
       AUTH_SERVICE_TIMEOUT_MS: ${AUTH_SERVICE_TIMEOUT_MS:-3000}
       AUTH_CACHE_TTL_MS: ${AUTH_CACHE_TTL_MS:-10000}
-      # Secret partagé avec Message-Service pour /api/internal/* (accès aux
-      # salons). Jamais relayé par Serveur-API.
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-chatvardage_internal_dev}
-      # Prévenu de chaque changement de serveur (temps réel). Pas de
-      # depends_on : message-service dépend déjà de room-service, et un
-      # événement perdu au démarrage est sans gravité.
       MESSAGE_SERVICE_URL: http://message-service:3004
 
     volumes:
@@ -273,7 +249,6 @@ services:
     restart: unless-stopped
 
     environment:
-      # production : refuse de démarrer avec les secrets de dev (voir .env.example).
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 3004
 
@@ -285,7 +260,6 @@ services:
       AUTH_SERVICE_TIMEOUT_MS: ${AUTH_SERVICE_TIMEOUT_MS:-3000}
       AUTH_CACHE_TTL_MS: ${AUTH_CACHE_TTL_MS:-10000}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
-      # Droits d'accès aux salons : route interne de Room-Service.
       ROOM_SERVICE_URL: http://room-service:3003
       ROOM_SERVICE_TIMEOUT_MS: ${ROOM_SERVICE_TIMEOUT_MS:-3000}
       ROOM_ACCESS_CACHE_TTL_MS: ${ROOM_ACCESS_CACHE_TTL_MS:-10000}
@@ -334,14 +308,11 @@ services:
     restart: unless-stopped
 
     environment:
-      # production : refuse de démarrer avec les secrets de dev (voir .env.example).
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 3005
       DATABASE_URL: >-
         postgresql://${CONFIG_DB_USER:-config_service}:${CONFIG_DB_PASSWORD:-config_service_dev}@postgres:5432/${CONFIG_DB:-chatvardage_config}?schema=public
 
-      # Pas d'appel à Auth-Service : Serveur-API valide le jeton et transmet
-      # l'identité dans l'en-tête x-user-id, crue seulement avec ce secret.
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-chatvardage_internal_dev}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
 
@@ -352,7 +323,6 @@ services:
     ports:
       - "127.0.0.1:3005:3005"
 
-    # Ce healthcheck remplace le HEALTHCHECK du Dockerfile de User-Config-Service.
     healthcheck:
       test:
         [
@@ -385,8 +355,6 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 3000
-      # COOKIE_SECRET et SESSION_SECRET sont chargés depuis /run/chatvardage/.env par
-      # scripts/docker-entrypoint-env.sh après le bootstrap generer-env.
       AUTH_SERVICE_URL: http://auth-service:3001
       ROOM_SERVICE_URL: http://room-service:3003
       MESSAGE_SERVICE_URL: http://message-service:3004
@@ -445,7 +413,6 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
       TRUST_PROXY: ${TRUST_PROXY:-false}
       AUTH_CACHE_TTL_MS: ${AUTH_CACHE_TTL_MS:-10000}
-      # Joint aux seules requêtes vers User-Config (avec x-user-id).
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-chatvardage_internal_dev}
 
     volumes:
@@ -487,4 +454,6 @@ networks:
 
 volumes:
   postgres_data:
+    name: chatvardage-c2_postgres_data
   redis_data:
+    name: chatvardage-c2_redis_data

@@ -4,20 +4,21 @@
 
 | Dépôt | Version déclarée | Tag attendu |
 |---|---|---|
-| [Frontend](https://github.com/Chatvardage/A26_5A6_01-Frontend) | 2.0.0 | `v2.0.0` |
-| [Serveur-API](https://github.com/Chatvardage/A26_5A6_01-Serveur-API) | 1.0.0 | `v1.0.0` |
-| [Authentification](https://github.com/Chatvardage/A26_5A6_01-Authentification) | 1.0.0 | `v1.0.0` |
-| [Room-Service](https://github.com/Chatvardage/A26_5A6_01-Room-Service) | 1.0.0 | `v1.0.0` |
-| [Message-Service](https://github.com/Chatvardage/A26_5A6_01-Message-Service) | 1.0.0 | `v1.0.0` |
-| [User-Config-Service](https://github.com/Chatvardage/A26_5A6_01-User-Config-Service) | 1.0.0 | `v1.0.0` |
-| [Dashboard](https://github.com/Chatvardage/A26_5A6_01-Dashboard) | 1.0.0 | `v1.0.0` |
+| [Frontend](https://github.com/Chatvardage/A26_5A6_01-Frontend) | 2.1.0 | `v2.1.0` |
+| [Serveur-API](https://github.com/Chatvardage/A26_5A6_01-Serveur-API) | 1.1.0 | `v1.1.0` |
+| [Authentification](https://github.com/Chatvardage/A26_5A6_01-Authentification) | 1.1.0 | `v1.1.0` |
+| [Room-Service](https://github.com/Chatvardage/A26_5A6_01-Room-Service) | 1.1.0 | `v1.1.0` |
+| [Message-Service](https://github.com/Chatvardage/A26_5A6_01-Message-Service) | 1.1.0 | `v1.1.0` |
+| [User-Config-Service](https://github.com/Chatvardage/A26_5A6_01-User-Config-Service) | 1.0.1 | `v1.0.1` |
+| [Dashboard](https://github.com/Chatvardage/A26_5A6_01-Dashboard) | 1.0.1 | `v1.0.1` |
+| [Mobile](https://github.com/Chatvardage/A26_5A6_01-Mobile) | 1.0.0 (`package.json` et `app.json`) | `v1.0.0` |
 | [Infra](https://github.com/Chatvardage/A26_5A6_01-Infra) | sans package.json | `v1.0.0` |
 
 Les tags indiqués sont les noms attendus pour les versions déclarées; cette table ne confirme pas leur publication. Infra possède un tag propre à la configuration et à la documentation, sans package.json.
 
 ## Cohérence des versions
 
-Les services et le Dashboard utilisent `1.0.0`; le client desktop utilise `2.0.0`. Chaque dépôt évolue indépendamment. Une version doit correspondre au contenu publié et rester reproductible.
+Chaque dépôt évolue indépendamment. Les versions mineures regroupent les fonctionnalités compatibles ajoutées depuis `main`; les correctifs seuls changent la version de correction. Une version doit correspondre au contenu publié et rester reproductible.
 
 Le script `scripts/verifier-version.mjs` vérifie la cohérence de package.json et package-lock.json, puis compare le tag `v<version>` lorsqu’il est exécuté sur un tag. Il est présent dans les CI des sept applications. Authentification déclare également la version du binaire dans Cargo.toml et Cargo.lock; conserver ces fichiers alignés avec les métadonnées npm.
 
