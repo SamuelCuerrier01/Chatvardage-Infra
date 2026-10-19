@@ -26,3 +26,9 @@ Les actions qui manipulent ces secrets restent épinglées par SHA et les CLI pa
 ## Sandbox Linux de Codex
 
 Le job Codex utilise Ubuntu 24.04 et installe `bubblewrap` ainsi que le profil AppArmor `bwrap-userns-restrict` avant de restaurer ses identifiants. Un essai de lecture d'`AGENTS.md` dans un namespace sans réseau vérifie le prérequis avant la revue. La revue garde `--sandbox read-only` ; aucune restriction AppArmor globale n'est désactivée. Voir les [prérequis officiels du sandbox](https://learn.chatgpt.com/docs/sandboxing#prerequisites).
+
+## Contenu des revues
+
+Les problèmes sont listés par gravité : Critique (P0), Élevé (P1), Moyen (P2), Faible (P3), avec fichier, ligne, scénario déclencheur et impact. Les catégories vides et préférences cosmétiques sont omises. Copilot, privé de ses outils dans ce workflow, doit annoncer que son examen se limite au diff fourni.
+
+Le commentaire Codex distingue les problèmes actionnables, les vérifications statiques et les limites. Il cite les fichiers réellement lus et les comportements vérifiés ; une absence de problème ne prouve pas une couverture exhaustive. Les tests examinés ne sont pas présentés comme exécutés. Un échec de lecture des fichiers doit être signalé comme une revue incomplète, sans verdict global rassurant. Les résultats des tests restent dans la CI du même commit.
