@@ -44,7 +44,7 @@ Vérifier les migrations sur les quatre bases neuves. Redémarrer sans supprimer
 
 ## Scénario mobile
 
-Deux comptes sur deux téléphones (Expo Go), backend de la stack Infra. Les commandes et la cible déclarée sont dans le [README Mobile](https://github.com/Chatvardage/A26_5A6_01-Mobile#cible-test%C3%A9e) ; les résultats sont rangés dans son dossier [`docs/preuves`](https://github.com/Chatvardage/A26_5A6_01-Mobile/tree/develop/docs/preuves).
+Deux comptes sur deux téléphones (Expo Go), backend de la stack Infra. Les commandes et la cible déclarée sont dans le [README Mobile](https://github.com/Chatvardage/A26_5A6_01-Mobile#cible-test%C3%A9e). Les preuves d'exécution (captures, vidéo) ne sont pas versionnées : elles accompagnent la remise.
 
 | Étape | Manipulation | Résultat attendu |
 |---|---|---|
