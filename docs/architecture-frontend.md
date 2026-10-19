@@ -219,12 +219,9 @@ renvoie `fenetre:maximisee` pour l'icône agrandir/restaurer. À chaque
 redimensionnement, `appliquerZoomAdaptatif` ajuste le zoom (100 % à
 135 %).
 
-**Session expirée.** Sur un 401 pendant une session ouverte,
-`RealGatewayRuntime` revérifie le jeton (`GET /api/auth/me`) — un 401 peut
-aussi vouloir dire « mot de passe actuel incorrect ». Si le jeton est
-refusé, la session est fermée et `session-expiree` est émis : `main.js`
-ramène la fenêtre à l'écran de connexion, qui l'explique
-(`navigation:motif-retour-connexion`).
+**Renouvellement de session.** Les jetons d’accès (15 minutes) et de renouvellement restent dans le processus principal et sont persistés ensemble, chiffrés par `safeStorage`. Sur un 401, le client partage une seule rotation via `POST /api/auth/refresh` entre les requêtes concurrentes, puis rejoue chaque requête une fois avec le nouvel accès. Un refus de renouvellement ferme la session et émet `session-expiree`. Un ancien fichier contenant seulement l’accès reste lisible ; la prochaine connexion ajoute le renouvellement. Sans coffre sécurisé, aucun jeton n’est conservé sur disque.
+
+**Déconnexion et changement de compte.** Le client efface immédiatement sa session locale et demande la révocation de sa famille via `POST /api/auth/logout`, même si cet appel peut échouer hors ligne. Les réponses HTTP et événements du socket précédent ne modifient pas la session suivante. « Déconnecter les autres appareils » conserve les deux nouveaux jetons reçus d’Auth.
 
 **Messages non lus.** Les compteurs viennent de Message-Service
 (`messages:non-lus` → `GET /api/messages/unread`), chargés à l'ouverture de
@@ -294,7 +291,7 @@ réinterroge pas les autres utilisateurs tant que le temps réel est actif.
 ## Sécurité
 
 `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`,
-`webviewTag: false`. Jeton de session chiffré par le système
+`webviewTag: false`. Jetons d’accès et de renouvellement chiffrés par le système
 (`safeStorage`) dans un fichier `0600`. Chaque canal IPC est déclaré explicitement dans
 `preload.js` et `main.js`, qui vérifie la provenance de l'appel. Les
 messages sont affichés par `textContent` / création DOM, jamais par

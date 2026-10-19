@@ -49,34 +49,7 @@ présence et messages de salon en temps réel via Socket.IO. Voir
 - **Chat :** HTML/CSS/JavaScript vanilla.
 - **Tests :** Vitest.
 - **Qualité :** ESLint + Prettier.
-- **Persistance :** jeton de session sur disque (`app.getPath('userData')`),
-  chiffré par le système (`safeStorage` : trousseau Windows/macOS,
-  libsecret/KWallet sous Linux) dans un fichier `0600` ; repli en clair si
-  aucun chiffrement n'est disponible (et, sous Linux sans trousseau,
-  Electron ne fait que de l'obscurcissement),
-  backend réel comme source de vérité pour le reste ; stockage local pour
-  certaines préférences/états d'interface.
-
-Flux principal :
-
-```text
-UI (renderer)
-   ↓ API limitée exposée par preload.js
-IPC Electron
-   ↓
-main.js
-   ↓
-RealGatewayRuntime
-   ↓
-Gateway ChatVardage (Serveur-API) — HTTP + Socket.IO
-```
-
-Le renderer n'a jamais accès directement à Node.js ou à `ipcRenderer`.
-
-Structure détaillée du code : voir [architecture frontend](../architecture-frontend.md). Après `connexion.prete`, les pages rechargent les historiques REST pour rattraper les événements manqués.
-
-### Fenêtre et interface
-
+- **Persistance :** accès et renouvellement chiffrés ensemble par `safeStorage` dans `app.getPath('userData')`, fichier `0600`. Aucun stockage en clair ; le backend Linux `basic_text` est refusé et, sans coffre, la session reste seulement en mémoire. Les données métier restent sur le backend.
 - **Barre de titre personnalisée** : hors macOS, la fenêtre est sans cadre
   (`frame: false`) — le cadre natif laissait une barre et un contour blancs
   sous Linux/WSLg. `preload.js` injecte en haut de chaque page une bande
@@ -115,9 +88,7 @@ Structure détaillée du code : voir [architecture frontend](../architecture-fro
 - **Messages temporaires** (`#toast` : confirmations, « nouveau message »
   quand la notification système est indisponible) : en haut, centrés sous
   la barre de titre, pour ne pas masquer la zone de saisie.
-- **Session expirée** (jeton de 24 h expiré, ou révoqué par un changement de
-  mot de passe ailleurs) : détectée au premier 401, l'app revient à l'écran
-  de connexion avec le message « Ta session a expiré ».
+- **Session :** l’accès de 15 minutes est renouvelé automatiquement ; un refus de renouvellement ramène à l’écran de connexion. La déconnexion efface les jetons et demande leur révocation auprès d’Auth ; une panne réseau peut empêcher cette révocation distante.
 - **Aperçu dans les notifications** : menu des notifications → « Afficher le
   contenu » (activé par défaut). Désactivé, la notification système dit
   seulement « Nouveau message reçu » (utile sur un écran verrouillé).
