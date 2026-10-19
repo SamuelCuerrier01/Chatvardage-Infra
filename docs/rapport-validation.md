@@ -1,19 +1,19 @@
 # Rapport de validation
 
-Vérifications automatisées refaites le 18 octobre 2026 sur les branches de nettoyage ; validation de la stack intégrée du 1er octobre 2026. Les résultats ci-dessous distinguent les vérifications exécutées des éléments restant à démontrer.
+Vérifications automatisées refaites le 19 octobre 2026 sur `develop` pour Mobile, Frontend, Serveur-API et Message-Service, le 18 octobre 2026 pour les autres dépôts ; validation de la stack intégrée du 1er octobre 2026. Les résultats ci-dessous distinguent les vérifications exécutées des éléments restant à démontrer.
 
 ## Vérifications automatisées
 
 | Application | Résultat |
 |---|---|
-| Mobile | 1064 tests (97 suites) ; couverture de 100 % ; types et lint réussis ; bundle Android exporté ; parcours `test:integration` (19 vérifications) réussi contre la stack locale |
-| Frontend | 408 tests ; couverture de 100 % sur le périmètre configuré ; types et lint réussis |
+| Mobile | 1094 tests (97 suites) ; couverture de 100 % ; types et lint réussis ; bundle Android exporté ; parcours `test:integration` (19 vérifications) réussi contre la stack locale |
+| Frontend | 481 tests ; couverture de 100 % sur le périmètre configuré ; types et lint réussis |
 | Dashboard | 83 tests ; couverture de 99,7 % (lignes) ; types et lint réussis |
 | Authentification | 185 tests sur une base PostgreSQL migrée ; format et Clippy réussis |
 | Room-Service | 205 tests unitaires et 14 tests e2e ; couverture de 100 % |
-| Message-Service | 394 tests unitaires ; couverture de 100 % |
+| Message-Service | 395 tests unitaires ; couverture de 100 % |
 | User-Config-Service | 83 tests unitaires et 24 tests e2e ; couverture de 100 % |
-| Serveur-API | 136 tests unitaires et 8 tests e2e ; couverture de 100 % |
+| Serveur-API | 137 tests unitaires et 8 tests e2e ; couverture de 100 % |
 
 Les vérifications npm de compilation et de lint des services passent. Les couvertures reflètent les exclusions et seuils de chaque dépôt; elles ne signifient pas que toutes les interactions système sont couvertes. Le test des notifications exécute le module principal avec Electron simulé.
 
@@ -36,9 +36,14 @@ Une stack Docker isolée a été construite depuis les sources avec des volumes 
 - Rôles par serveur, par l’API du Gateway : dans un serveur privé, un simple membre invité ne peut pas créer de salon (403). Nommé modérateur par le propriétaire, il crée, renomme et supprime un salon, mais ne peut ni renommer ni supprimer le serveur (403). Rétrogradé, il perd de nouveau ces droits.
 - Pagination des messages du Dashboard : avec 250 DM en base, l’API AdminJS annonce un total de 250 et sert des pages de 10 jusqu’à la 25e (auparavant, seuls les 50 plus récents étaient chargés).
 
+## Parcours mobile sur appareil
+
+Le parcours mobile a été enregistré en vidéo sur deux téléphones Android physiques (Samsung S25 Ultra sous Android 16 et Samsung S9 sous Android 10), dans Expo Go (SDK 57), avec deux comptes et le backend de la stack Infra : connexion, profil, serveurs et salons, rôles et modération, messages privés, compteurs de non-lus, accusés, présence, modification d'un message, recherche et historique, perte puis reprise du réseau. La vidéo et les captures accompagnent la remise et ne sont pas versionnées.
+
 ## Portée et vérifications complémentaires
 
 - Vérifier les notifications natives hors focus avec deux fenêtres Electron sur chaque système cible. Les clients réseau automatisés ne remplacent pas cette observation.
+- Vérifier les notifications locales du mobile sur Android dans une development build : Expo Go Android ne les charge pas, seuls les badges dans l'application y sont observables.
 - Valider les installateurs desktop sur les plateformes supportées. Une compilation locale réussie ne prouve pas leur installation sur chaque système.
 - Vérifier les exécutions GitHub Actions après publication des commits et des tags. Les résultats décrits ici proviennent de validations locales.
 
