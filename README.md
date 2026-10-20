@@ -108,7 +108,7 @@ Le détail des vérifications de bout en bout (Socket.IO entre deux clients, rat
 | http://localhost:3005/docs | Swagger User-Config-Service |
 | http://localhost:8081 | Adminer, inspection PostgreSQL en développement (serveur `postgres`, identifiants `POSTGRES_SUPERUSER` / `POSTGRES_SUPERPASS` du `.env`) |
 
-Tous les ports publiés sont liés à `127.0.0.1`. Deux clients sur **le même poste**, avec deux profils Electron, conviennent à la démonstration. Les autres postes du réseau ne peuvent pas joindre cette configuration telle quelle.
+Tous les ports publiés sont liés à `127.0.0.1` ; le Gateway l’est aussi à `[::1]`, car macOS résout `localhost` en IPv6 d’abord. Deux clients sur **le même poste**, avec deux profils Electron, conviennent à la démonstration. Les autres postes du réseau ne peuvent pas joindre cette configuration telle quelle.
 
 ### Projet Compose renommé
 

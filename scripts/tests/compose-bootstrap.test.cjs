@@ -33,6 +33,7 @@ test('tous les services runtime attendent la génération du .env', () => {
 
 test('le Gateway écoute localement par défaut et le bootstrap prépare les secrets séparés', () => {
   assert.match(compose, /API_BIND_ADDRESS:-127\.0\.0\.1/);
+  assert.match(compose, /"\[::1\]:3000:3000"/);
   assert.match(compose, /preparer-env-services\.sh/);
   assert.doesNotMatch(compose, /chmod 644 \/infra\/\.env/);
 });

@@ -420,7 +420,8 @@ services:
       - ./scripts/docker-entrypoint-env.sh:/infra/scripts/docker-entrypoint-env.sh:ro
 
     ports:
-      - "3000:3000"
+      - "${API_BIND_ADDRESS:-127.0.0.1}:3000:3000"
+      - "[::1]:3000:3000"
 
     healthcheck:
       test:

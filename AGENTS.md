@@ -44,7 +44,7 @@ Ne jamais déclarer la PR prête si une commande requise échoue.
 ## Variables et sécurité
 - `.env` ne doit jamais être commité. `.env.example` contient seulement des valeurs de développement ; `generer-env` crée `.env` avec des secrets aléatoires au premier `docker compose up`.
 - Un service utilise uniquement le compte SQL de sa propre base.
-- Tout port publié dans `docker-compose.yml` est lié à `127.0.0.1` (ou à `API_BIND_ADDRESS` pour le Gateway), jamais à toutes les interfaces par défaut.
+- Tout port publié dans `docker-compose.yml` est lié à `127.0.0.1` (ou à `API_BIND_ADDRESS` pour le Gateway), jamais à toutes les interfaces par défaut. Le Gateway est aussi publié sur `[::1]` : macOS résout `localhost` en IPv6 d'abord, ne pas retirer cette ligne ni la remplacer par `3000:3000`.
 - Les origines CORS viennent d'une seule variable, `CORS_ORIGINS`, lue sous ce nom par tous les services, Auth compris.
 - Les services runtime ne montent que leur `.runtime-env/<service>` en lecture seule et le script d'entrée ; seul le bootstrap voit le `.env` principal.
 
