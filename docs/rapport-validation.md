@@ -11,7 +11,7 @@ Vérifications automatisées refaites le 19 octobre 2026 sur `develop` pour Mobi
 | Dashboard | 83 tests ; couverture de 99,7 % (lignes) ; types et lint réussis |
 | Authentification | 185 tests sur une base PostgreSQL migrée ; format et Clippy réussis |
 | Room-Service | 205 tests unitaires et 14 tests e2e ; couverture de 100 % |
-| Message-Service | 395 tests unitaires ; couverture de 100 % |
+| Message-Service | 403 tests unitaires ; couverture de 100 % |
 | User-Config-Service | 83 tests unitaires et 24 tests e2e ; couverture de 100 % |
 | Serveur-API | 137 tests unitaires et 8 tests e2e ; couverture de 100 % |
 
