@@ -1,12 +1,12 @@
 # Rapport de validation
 
-Vérifications automatisées refaites le 19 octobre 2026 sur `develop` pour Mobile, Frontend, Serveur-API et Message-Service, le 18 octobre 2026 pour les autres dépôts ; validation de la stack intégrée du 1er octobre 2026. Les résultats ci-dessous distinguent les vérifications exécutées des éléments restant à démontrer.
+Vérifications automatisées refaites le 20 octobre 2026 sur le code publié pour Mobile, Serveur-API et Message-Service, le 19 octobre 2026 pour Frontend, le 18 octobre 2026 pour les autres dépôts ; validation de la stack intégrée du 1er octobre 2026. Les résultats ci-dessous distinguent les vérifications exécutées des éléments restant à démontrer.
 
 ## Vérifications automatisées
 
 | Application | Résultat |
 |---|---|
-| Mobile | 1094 tests (97 suites) ; couverture de 100 % ; types et lint réussis ; bundle Android exporté ; parcours `test:integration` (19 vérifications) réussi contre la stack locale |
+| Mobile | 1111 tests (98 suites) ; couverture de 100 % ; types et lint réussis ; bundle Android exporté ; parcours `test:integration` (19 vérifications) réussi contre la stack locale |
 | Frontend | 481 tests ; couverture de 100 % sur le périmètre configuré ; types et lint réussis |
 | Dashboard | 83 tests ; couverture de 99,7 % (lignes) ; types et lint réussis |
 | Authentification | 185 tests sur une base PostgreSQL migrée ; format et Clippy réussis |
