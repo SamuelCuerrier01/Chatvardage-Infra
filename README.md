@@ -190,7 +190,7 @@ docker compose logs --tail=100 auth-service room-service message-service user-co
 - Port occupé : arrêter l’autre environnement ou choisir des ports distincts dans une configuration de test.
 - API saine mais connexion impossible : examiner Auth et les migrations; un healthcheck ne crée pas de compte.
 - JWT expiré/révoqué : se reconnecter; les droits des services peuvent être mémorisés 10 s.
-- Redis indisponible : un message peut déjà être écrit en base avant l’échec de publication. Relire l’historique avant de réessayer pour éviter un doublon; il n’y a pas de transaction distribuée ni de file de reprise durable.
+- Redis indisponible : l’écriture en base est confirmée au client (au plus 4 s plus tard) et Message-Service journalise la publication perdue. Les autres clients voient le changement à leur prochaine lecture REST; il n’y a pas de transaction distribuée ni de file de reprise durable.
 - Notifications sous WSL : l’affichage natif dépend de D-Bus/du bureau. L’application possède un repli visuel; vérifier les notifications sur l’OS cible.
 
 `docker compose down` conserve les volumes. **`./scripts/reset.sh` et `docker compose down -v` effacent les données** : réserver ces commandes à un environnement jetable. Pour une validation propre, utiliser le protocole isolé de `docs/validation.md`.

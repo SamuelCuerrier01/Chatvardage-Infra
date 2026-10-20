@@ -67,7 +67,7 @@ sequenceDiagram
   M->>P: SELECT historique
 ```
 
-Une publication Redis échouée n’annule pas l’écriture PostgreSQL. Redis Pub/Sub ne rejoue pas les événements manqués : chaque client (Electron et mobile) relit l’historique par REST après `connexion.prete`. Les doublons visuels sont fusionnés par identifiant. Les messages de salon sont également persistés et diffusés en temps réel.
+Une publication Redis échouée n’annule pas l’écriture PostgreSQL : la requête réussit, au plus 4 s plus tard, et Message-Service journalise la publication perdue. Redis Pub/Sub ne rejoue pas les événements manqués : chaque client (Electron et mobile) relit l’historique par REST après `connexion.prete`. Les doublons visuels sont fusionnés par identifiant. Les messages de salon sont également persistés et diffusés en temps réel.
 
 ## Configuration et rôles
 

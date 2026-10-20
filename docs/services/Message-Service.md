@@ -11,7 +11,7 @@ PostgreSQL est la source de vérité. Après une écriture réussie, Message-Ser
 
 `PostgreSQL -> Redis PUBLISH -> Redis SUBSCRIBE -> Socket.IO`
 
-Redis ne remplace jamais la persistance. Après une reconnexion, le client recharge l'historique par l'API REST.
+Redis ne remplace jamais la persistance. Si la publication échoue ou n'aboutit pas en 2 s de connexion et 2 s de commande (`DELAI_COMMANDE_MS`), l'écriture reste confirmée au client et l'échec est journalisé avec l'identifiant du message. Après une reconnexion, le client recharge l'historique par l'API REST.
 
 ## Authentification
 
