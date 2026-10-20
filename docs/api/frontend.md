@@ -52,21 +52,27 @@ pour le détail par service.
 | POST | `/api/auth/register` | `{ pseudo, courriel, mot_de_passe }` → `{ jeton, utilisateur }` |
 | GET/PATCH/DELETE | `/api/auth/me` | Profil courant (lecture/modification/suppression du compte) |
 | POST | `/api/auth/logout-all` | « Se déconnecter partout » (page profil) : invalide tous les jetons du compte |
+| POST | `/api/auth/logout-others` | « Déconnecter les autres appareils » (page profil) : nouvelle session pour cet appareil, les autres sont déconnectés |
 | GET | `/api/users/lookup?ids=` | Résolution de pseudo pour d'autres utilisateurs (id → pseudo uniquement) |
 | GET | `/api/users/search?q=` | Recherche par début de pseudo (nouveau DM, invitation) |
 | GET/POST | `/api/servers` | Mes serveurs (sans la liste des membres) / créer un serveur |
-| GET | `/api/servers/decouvrir?q=`, `/api/servers/invitations/me` | Serveurs publics à rejoindre, mes invitations |
+| GET | `/api/servers/decouvrir?q=&decalage=&limite=`, `/api/servers/invitations/me` | Serveurs publics à rejoindre (par pages de 10, les plus fréquentés d'abord : `{ serveurs, total, suivant }`), mes invitations |
 | PATCH/DELETE | `/api/servers/:id` | Modifier (nom, icône, visibilité) / supprimer |
 | POST | `/api/servers/:id/join`, `/leave` | Rejoindre / quitter un serveur |
 | GET | `/api/servers/:id/members?decalage=&limite=` | Membres par pages (panneau des membres) |
 | GET | `/api/servers/:id/members?ids=` | Lesquels sont déjà membres (fenêtre « Inviter ») |
-| PATCH/DELETE | `/api/servers/:id/members/:userId` | Changer le rôle / expulser |
+| PATCH/DELETE | `/api/servers/:id/members/:userId` | Changer le rôle / expulser (`?nouveauProprietaire=<userId>` obligatoire pour expulser le propriétaire) |
 | POST | `/api/servers/:id/invitations`, `/invitations/accept`, `/invitations/refuse` | Invitations |
 | POST/PATCH/DELETE | `/api/servers/:id/channels`, `/api/channels/:id` | Créer / modifier / supprimer un salon |
 | POST/GET | `/api/messages/rooms/:roomId`, `/history` | Messages de salon |
 | PATCH/DELETE | `/api/messages/rooms/:roomId/:id` | Modifier (auteur) / supprimer (auteur, ou modérateur du serveur) un message de salon |
 | POST/GET | `/api/messages`, `/api/messages/history/:otherUserId` | Messages privés (DM) |
 | GET | `/api/messages/conversations` | Liste des conversations privées |
+| GET | `/api/messages/unread` | Compteurs de messages non lus (salons et DM) |
+| GET | `/api/messages/activity` | Date du dernier message de chaque salon lisible (tri des serveurs par activité) |
+| PUT | `/api/messages/rooms/:roomId/read`, `/api/messages/conversations/:otherUserId/read` | Marquer une conversation comme lue (conversation affichée, fenêtre au premier plan) |
+| GET | `/api/messages/conversations/:otherUserId/read-state`, `/api/messages/rooms/:roomId/read-states` | Accusés de lecture : ✓✓ des messages privés, « Vu par » des salons |
+| GET | `/api/messages/search?q=&limit=20&cursor=&conversationId=` | Recherche dans la conversation affichée (`room:<salon>` ou `dm:<interlocuteur>`) |
 | PATCH/DELETE | `/api/messages/:id` | Modifier/supprimer un DM |
 | GET/PATCH | `/api/config-utilisateur` | Alias, thème, langue, mode de notification |
 | PUT | `/api/config-utilisateur/presence` | Présence (soi-même uniquement) |
@@ -74,7 +80,8 @@ pour le détail par service.
 Socket.IO (`/messages`, `auth: { token }`) : `private-message.created/updated/deleted`,
 `room-message.created/updated/deleted` (client émet aussi `room-message.join`/
 `leave`/`send` — seulement après `connexion.prete`, voir plus bas),
-`connexion.prete` (socket authentifié par Message-Service : le client
+`read-state.updated` (accusé de lecture : ✓✓, « Vu par », non-lus lus depuis
+un autre appareil), `connexion.prete` (socket authentifié par Message-Service : le client
 annonce alors sa présence et rejoint ses salons ; avant, le serveur refuse
 ses événements — repli au bout de 5 s si l'événement n'arrive jamais, par
 exemple face à un Message-Service plus ancien), `room-message.revoked` (accès au salon perdu : le client
@@ -97,3 +104,10 @@ verifierSessionApres401, au lieu de se reconnecter en boucle), `typing`
   gateway retente automatiquement avec un pseudo légèrement randomisé). Une
   fois inscrit⋅e, l'écran "Choisis ton pseudo" permet de le changer tout de
   suite (ou plus tard, depuis la page profil).
+
+
+### Position complète des accusés de lecture (Message-Service #9 / Frontend #100)
+
+Les réponses HTTP `read-state` / `read-states` et les événements `read-state.updated` exposent `lastReadMessageId`, en plus de `lastReadAt`. La position de lecture est le couple `(date, identifiant)`, ordonné comme l’historique : comparer la date puis l’identifiant. Une lecture ancienne sans identifiant (`null` ou champ absent) couvre toute sa milliseconde. Chaque consommateur conserve la position maximale et fusionne la réponse HTTP initiale avec les événements reçus pendant le chargement : ni une réponse tardive ni un événement désordonné ne doit faire reculer les coches ou « Vu par ». Le changement est additif; un client qui utilise uniquement la date doit être mis à jour pour distinguer deux messages de même milliseconde.
+
+Frontend conserve l’identifiant du premier non-lu pendant la consultation; de nouveaux messages ne déplacent pas le séparateur. Après un marquage réussi, le compteur est réconcilié avec `unreadCount` et les messages arrivés en cours de requête sont marqués ensuite uniquement si la conversation reste affichée au premier plan.

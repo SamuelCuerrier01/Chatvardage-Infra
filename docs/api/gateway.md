@@ -8,10 +8,13 @@ Le Serveur-API conserve les contrats des microservices. Il ne renomme pas les ch
 |---|---|---|
 | POST | `/api/auth/register` | publique, rate-limit Gateway |
 | POST | `/api/auth/login` | publique, rate-limit Gateway |
+| POST | `/api/auth/refresh` | token opaque dans le corps JSON, rate-limit Gateway |
+| POST | `/api/auth/logout` | révocation de famille, token dans le corps JSON, rate-limit Gateway |
 | GET | `/api/auth/me` | Bearer JWT |
 | PATCH | `/api/auth/me` | Bearer JWT, rate-limit Gateway |
 | DELETE | `/api/auth/me` | Bearer JWT, rate-limit Gateway |
 | POST | `/api/auth/logout-all` | Bearer JWT (invalide tous les jetons du compte) |
+| POST | `/api/auth/logout-others` | Bearer JWT (invalide tous les jetons du compte, renvoie une nouvelle session à l'appareil courant) |
 | GET | `/api/users/lookup?ids=<id>,<id>` | Bearer JWT (tout utilisateur) ; `{id, pseudo}` seulement, 100 ids max |
 | GET | `/api/users/search?q=<début de pseudo>&limit=<1-50>` | Bearer JWT (tout utilisateur) ; `{id, pseudo}` seulement |
 | GET | `/api/users` | admin |
@@ -28,7 +31,7 @@ Toutes ces routes exigent un Bearer JWT, validé par Room-Service auprès d'Auth
 | Méthode | Route Gateway | Droits |
 |---|---|---|
 | GET | `/api/servers` | mes serveurs (ajoute l'appelant au serveur par défaut) |
-| GET | `/api/servers/decouvrir?q=<nom>` | serveurs publics dont je ne suis pas membre |
+| GET | `/api/servers/decouvrir?q=<nom>&decalage=&limite=` | serveurs publics dont je ne suis pas membre, par pages (`{ serveurs, total, suivant }`, 10 par défaut, 100 au plus, les plus fréquentés d'abord) |
 | GET | `/api/servers/invitations/me` | mes invitations |
 | POST | `/api/servers` | tout utilisateur (devient propriétaire) |
 | GET | `/api/servers/:id` | membre ; aperçu si public et non-membre (sans liste des membres) |
@@ -37,7 +40,7 @@ Toutes ces routes exigent un Bearer JWT, validé par Room-Service auprès d'Auth
 | DELETE | `/api/servers/:id` | propriétaire ou admin (pas le serveur par défaut) |
 | POST | `/api/servers/:id/join` | serveur public, ou privé sur invitation |
 | POST | `/api/servers/:id/leave` | membre (ni le propriétaire, ni le serveur par défaut) |
-| DELETE | `/api/servers/:id/members/:userId` | modérateur minimum, au-dessus de la cible |
+| DELETE | `/api/servers/:id/members/:userId?nouveauProprietaire=<userId>` | modérateur minimum, au-dessus de la cible ; propriétaire : admin seulement, avec un membre successeur |
 | PATCH | `/api/servers/:id/members/:userId` | propriétaire ou admin (nommer/retirer un modérateur) |
 | POST | `/api/servers/:id/invitations` | modérateur minimum (pas le serveur par défaut) |
 | POST | `/api/servers/:id/invitations/accept` | invité |
@@ -58,7 +61,8 @@ Messages privés :
 | Méthode | Route Gateway |
 |---|---|
 | POST | `/api/messages` |
-| GET | `/api/messages/conversations` |
+| GET | `/api/messages/conversations` (avec `unreadCount`) |
+| PUT | `/api/messages/conversations/:otherUserId/read` |
 | GET | `/api/messages/history/:otherUserId?limit=50&cursor=<messageId>` |
 | GET | `/api/messages/:id` |
 | PATCH | `/api/messages/:id` |
@@ -70,9 +74,21 @@ Messages de salon (droits de lecture/écriture vérifiés auprès de Room-Servic
 |---|---|
 | POST | `/api/messages/rooms/:roomId` |
 | GET | `/api/messages/rooms/:roomId/history?limit=50&cursor=<messageId>` |
+| PUT | `/api/messages/rooms/:roomId/read` |
 | GET | `/api/messages/rooms/:roomId/:id` |
 | PATCH | `/api/messages/rooms/:roomId/:id` |
 | DELETE | `/api/messages/rooms/:roomId/:id` |
+
+Non-lus et recherche (DM et salons lisibles uniquement) :
+
+| Méthode | Route Gateway |
+|---|---|
+| GET | `/api/messages/unread` |
+| GET | `/api/messages/activity` |
+| GET | `/api/messages/search/summary?q=<texte>` (comptes complets par personne, serveur et salon lisible; [contrat](recherche-resume.md)) |
+| GET | `/api/messages/conversations/:otherUserId/read-state` |
+| GET | `/api/messages/rooms/:roomId/read-states` |
+| GET | `/api/messages/search?q=<texte>&limit=20&cursor=<nextCursor>&conversationId=<dm:… \| room:…>` (`conversationId` facultatif : une seule conversation) |
 
 Routes admin de messages (JWT admin requis) : `GET/POST /api/messages/admin`, `DELETE /api/messages/admin/:id` et `POST /api/messages/rooms/:roomId/admin`. Voir le guide Message-Service pour les corps et paramètres.
 
@@ -115,6 +131,7 @@ Le Gateway relaie les événements tels quels ; leur contrat détaillé est dans
 - `private-message.created`, `private-message.updated`, `private-message.deleted`
 - `room-message.created`, `room-message.updated`, `room-message.deleted`
 - `room-message.revoked` (socket retiré d'un salon dont l'accès est perdu)
+- `read-state.updated` (`{ kind, targetId, userId, lastReadAt }` : accusé de lecture d'un DM ou d'un salon)
 - `typing`
 - `connexion.prete` (socket authentifié : le client peut annoncer sa présence et rejoindre ses salons)
 - `session.revoquee` (jeton refusé à la connexion ou à la revalidation périodique : le socket est ensuite déconnecté)
@@ -149,7 +166,7 @@ Retourne `200` si tous répondent avec un statut HTTP 2xx, sinon `503` et `statu
 ## Erreurs produites par le Gateway
 
 - `413 Payload Too Large` : corps au-dessus de `MAX_PROXY_BODY_BYTES`.
-- `429 Too Many Requests` : limite de login/register atteinte.
+- `429 Too Many Requests` : quota Auth par IP et route atteint (login/register/refresh/logout ou modification/suppression du profil).
 - `502 Bad Gateway` : réponse Auth 2xx dont le contrat d'identité est invalide lors d'un accès User-Config (`id` absent, vide, de plus de 255 caractères ou contenant un caractère de contrôle comme CR/LF).
 - `503 Service Unavailable` : service interne injoignable.
 - `504 Gateway Timeout` : délai `PROXY_TIMEOUT_MS` dépassé.
@@ -161,3 +178,5 @@ Un client qui n'a pas fini d'envoyer son corps de requête après `PROXY_TIMEOUT
 Toutes les réponses du Gateway portent `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` et `Referrer-Policy: strict-origin-when-cross-origin`, sauf si le service interne fournit lui-même ces en-têtes.
 
 Toutes les erreurs fonctionnelles renvoyées par Auth/Room/Message/User-Config sont transmises avec leur code d'origine. Lors de l'accès à User-Config, une réponse de refus d'Auth est également relayée telle quelle.
+
+Un upgrade WebSocket avec une URL malformée est rejeté par le Gateway avec `400` et fermeture de connexion. Un upgrade hors `/socket.io` reçoit `404` puis est fermé ; il n’est jamais transféré à Message-Service.

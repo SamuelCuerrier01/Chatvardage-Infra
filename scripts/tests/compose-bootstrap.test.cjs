@@ -26,8 +26,16 @@ test('tous les services runtime attendent la génération du .env', () => {
     const next = rest.search(/^  [A-Za-z0-9_-]+:\s*$/m);
     const section = next === -1 ? compose.slice(start) : compose.slice(start, start + 3 + next);
     assert.match(section, /generer-env:\s*\n\s+condition: service_completed_successfully/, `${service} doit attendre generer-env`);
-    assert.match(section, /\.\/:\/infra:ro/, `${service} doit voir le .env généré`);
+    assert.match(section, /\.\/\.runtime-env\/[a-z-]+:\/run\/chatvardage:ro/, `${service} doit voir son seul .env`);
+    assert.doesNotMatch(section, /\.\/:\/infra:ro/, `${service} ne doit pas voir tous les secrets`);
   }
+});
+
+test('le Gateway écoute localement par défaut et le bootstrap prépare les secrets séparés', () => {
+  assert.match(compose, /API_BIND_ADDRESS:-127\.0\.0\.1/);
+  assert.match(compose, /"\[::1\]:3000:3000"/);
+  assert.match(compose, /preparer-env-services\.sh/);
+  assert.doesNotMatch(compose, /chmod 644 \/infra\/\.env/);
 });
 
 test('entrypoint commun charge .env et construit les URLs sensibles au runtime', () => {

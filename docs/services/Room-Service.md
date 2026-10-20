@@ -87,7 +87,7 @@ Toutes les routes sont préfixées par `/api` et exigent un JWT, sauf mention co
 | Méthode | Route | Qui | Description |
 |---|---|---|---|
 | GET | `/api/servers` | connecté | Mes serveurs, Chatvardage en premier (m'y ajoute si besoin) |
-| GET | `/api/servers/decouvrir?q=` | connecté | Serveurs publics dont je ne suis pas membre (nom contenant `q`, 20 max) |
+| GET | `/api/servers/decouvrir?q=&decalage=&limite=` | connecté | Serveurs publics dont je ne suis pas membre (nom contenant `q`), par pages : `{ serveurs, total, suivant }`, 10 par défaut, 100 au plus, les plus fréquentés d'abord |
 | POST | `/api/servers` | connecté | Créer un serveur `{ nom, public? }` ; j'en deviens propriétaire (100 serveurs possédés au plus, sinon 400) |
 | GET | `/api/servers/:id` | membre (aperçu si public) | Détail ; 404 si privé et non-membre |
 | GET | `/api/servers/:id/members?decalage=&limite=&ids=` | membre | Membres par pages (voir ci-dessus) ; 403 si non-membre d'un serveur public |
@@ -95,7 +95,7 @@ Toutes les routes sont préfixées par `/api` et exigent un JWT, sauf mention co
 | DELETE | `/api/servers/:id` | propriétaire / admin | Supprime le serveur et ses salons ; interdit pour Chatvardage |
 | POST | `/api/servers/:id/join` | connecté | Rejoindre un serveur public, ou privé si invité |
 | POST | `/api/servers/:id/leave` | membre | Quitter ; interdit au propriétaire et pour Chatvardage |
-| DELETE | `/api/servers/:id/members/:userId` | modérateur+ | Expulser, seulement un membre de rang inférieur ; interdit dans Chatvardage |
+| DELETE | `/api/servers/:id/members/:userId?nouveauProprietaire=` | modérateur+ | Expulser, seulement un membre de rang inférieur ; interdit dans Chatvardage. Le propriétaire n'est expulsable que par un admin, qui désigne un autre membre dans `nouveauProprietaire` (400 sinon) : la propriété lui est transférée dans la même transaction |
 | PATCH | `/api/servers/:id/members/:userId` | propriétaire / admin | `{ role: 'membre' \| 'moderateur' }` |
 
 ### Invitations
@@ -126,6 +126,7 @@ Toutes les routes sont préfixées par `/api` et exigent un JWT, sauf mention co
 | Méthode | Route | Protection | Description |
 |---|---|---|---|
 | GET | `/api/internal/channels/:id/access/:userId?role=` | en-tête `x-internal-token` = `INTERNAL_SERVICE_TOKEN` | `{ salonId, serveurId, estMembre, peutLire, peutEcrire, peutModerer }` (`peutModerer` : modérateur du serveur, propriétaire ou admin, qui peut supprimer les messages des autres) |
+| GET | `/api/internal/users/:userId/channels?role=` | idem | Salons que l'utilisateur peut lire (mêmes règles que la route précédente ; un admin global les lit tous) : `{ salons: [{ salonId, serveurId, depuis }] }`, `depuis` = date d'arrivée dans le serveur (ISO 8601) ou `null` sans ligne de membre (admin non membre, serveur par défaut pas encore rejoint). Sert à la recherche et aux non-lus de Message-Service |
 | DELETE | `/api/internal/users/:userId` | idem (appelée par Authentification) | Compte supprimé : ses serveurs (et leurs salons) sont supprimés, il quitte les autres, ses invitations reçues disparaissent. Idempotent. Réponse `{ serveursSupprimes, serveursQuittes, invitationsSupprimees }` |
 
 `role` est le rôle global (`admin` \| `utilisateur`, défaut `utilisateur`) issu du JWT que Message-Service a déjà validé. Sans `INTERNAL_SERVICE_TOKEN` configuré, la route répond toujours 503 (échec fermé). **Serveur-API ne relaie pas `/api/internal`** : seuls les autres microservices, sur le réseau Docker interne, peuvent l'appeler. Le port du Room-Service ne doit pas être exposé publiquement.

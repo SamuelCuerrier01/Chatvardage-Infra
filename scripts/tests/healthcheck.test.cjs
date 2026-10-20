@@ -1,6 +1,5 @@
 'use strict';
 
-// Docker is simulated; the production shell and its Node HTTP probes are executed.
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');

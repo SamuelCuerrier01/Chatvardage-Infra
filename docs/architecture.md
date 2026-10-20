@@ -7,6 +7,7 @@
 ```mermaid
 flowchart TB
   FE[Client Electron : main / preload / renderer] -->|REST + Socket.IO| GW[Conteneur Serveur-API :3000]
+  MOB[Client mobile Expo : écrans / hooks / services] -->|REST /api + Socket.IO /messages| GW
   WEB[Navigateur administrateur] -->|HTTP :3002 / session cookie| DASH[Conteneur Dashboard :3000]
   DASH -->|REST + JWT admin| AUTH[Conteneur Auth :3001]
   DASH -->|REST + JWT admin| ROOM[Conteneur Room :3003]
@@ -33,7 +34,7 @@ flowchart TB
   end
 ```
 
-Le Gateway ne se connecte jamais à Redis. Le Dashboard appelle directement les services sur le réseau Docker; ses autorisations sont vérifiées par Auth et les services propriétaires. Tous les conteneurs sont sur le réseau `chatvardage`; PostgreSQL et Redis disposent de volumes persistants. Le navigateur et Electron vivent hors des conteneurs.
+Le Gateway ne se connecte jamais à Redis. Le Dashboard appelle directement les services sur le réseau Docker; ses autorisations sont vérifiées par Auth et les services propriétaires. Tous les conteneurs sont sur le réseau `chatvardage`; PostgreSQL et Redis disposent de volumes persistants. Le navigateur, Electron et l’application mobile vivent hors des conteneurs.
 
 ## Pourquoi cette architecture
 
@@ -45,12 +46,12 @@ Cette séparation exige davantage d’appels et de contrats qu’un monolithe : 
 
 ```mermaid
 sequenceDiagram
-  participant A as Electron A
+  participant A as Client A (Electron ou mobile)
   participant G as Gateway
   participant M as Message-Service
   participant P as PostgreSQL
   participant R as Redis
-  participant B as Electron B
+  participant B as Client B
   A->>G: POST /api/messages (Bearer)
   G->>M: Requête inchangée
   M->>M: Valider identité, destinataire, DTO et quota
@@ -66,7 +67,7 @@ sequenceDiagram
   M->>P: SELECT historique
 ```
 
-Une publication Redis échouée n’annule pas l’écriture PostgreSQL. Redis Pub/Sub ne rejoue pas les événements manqués : le frontend demande explicitement une resynchronisation REST après `connexion.prete`. Les doublons visuels sont fusionnés par identifiant. Les messages de salon sont également persistés et diffusés en temps réel.
+Une publication Redis échouée n’annule pas l’écriture PostgreSQL : la requête réussit, au plus 4 s plus tard, et Message-Service journalise la publication perdue. Redis Pub/Sub ne rejoue pas les événements manqués : chaque client (Electron et mobile) relit l’historique par REST après `connexion.prete`. Les doublons visuels sont fusionnés par identifiant. Les messages de salon sont également persistés et diffusés en temps réel.
 
 ## Configuration et rôles
 
@@ -80,4 +81,4 @@ Les configurations sont écrites/lues en REST dans User-Config. Le processus pri
 - Sessions/rate limits et certaines présences conservés en mémoire.
 - Suppressions interservices notifiées avec tentatives bornées; un échec définitif est journalisé.
 - Ce Compose utilise HTTP sur un réseau local et des identifiants de développement. Passer `NODE_ENV=production` seul ne fournit ni TLS ni gestion de secrets : un déploiement de production exige une configuration dédiée.
-- [Bases et migrations](database.md), [client desktop](architecture-frontend.md), [contrats](api/README.md).
+- [Bases et migrations](database.md), [client desktop](architecture-frontend.md), [client mobile](https://github.com/Chatvardage/A26_5A6_01-Mobile/blob/develop/docs/architecture.md), [contrats](api/README.md).

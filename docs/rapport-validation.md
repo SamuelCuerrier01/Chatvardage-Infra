@@ -1,22 +1,23 @@
 # Rapport de validation
 
-Validation locale du 1er octobre 2026, depuis les révisions de développement. Les vérifications automatisées ont été refaites le 2 octobre 2026 sur `develop`, avec un `npm ci` neuf. Les résultats ci-dessous distinguent les vérifications exécutées des éléments restant à démontrer.
+Vérifications automatisées refaites le 19 octobre 2026 sur `develop` pour Mobile, Frontend, Serveur-API et Message-Service, le 18 octobre 2026 pour les autres dépôts ; validation de la stack intégrée du 1er octobre 2026. Les résultats ci-dessous distinguent les vérifications exécutées des éléments restant à démontrer.
 
 ## Vérifications automatisées
 
 | Application | Résultat |
 |---|---|
-| Frontend | 226 tests; couverture de 100 % sur le périmètre configuré; types, lint et build réussis |
-| Dashboard | 79 tests; couverture de 100 %; types, lint, build et bundle AdminJS réussis |
-| Authentification | 161 tests sur une base PostgreSQL migrée; format et Clippy réussis; couverture des lignes de 99,01 %. `cargo audit` n’a pas été exécuté localement (il tourne dans le CI) |
-| Room-Service | 195 tests unitaires et 14 tests e2e; couverture de 100 % |
-| Message-Service | 291 tests unitaires; couverture de 100 % |
-| User-Config-Service | 83 tests unitaires et 24 tests e2e; couverture de 100 % |
-| Serveur-API | 135 tests unitaires et 6 tests e2e; couverture de 100 % |
+| Mobile | 1094 tests (97 suites) ; couverture de 100 % ; types et lint réussis ; bundle Android exporté ; parcours `test:integration` (19 vérifications) réussi contre la stack locale |
+| Frontend | 481 tests ; couverture de 100 % sur le périmètre configuré ; types et lint réussis |
+| Dashboard | 83 tests ; couverture de 99,7 % (lignes) ; types et lint réussis |
+| Authentification | 185 tests sur une base PostgreSQL migrée ; format et Clippy réussis |
+| Room-Service | 205 tests unitaires et 14 tests e2e ; couverture de 100 % |
+| Message-Service | 403 tests unitaires ; couverture de 100 % |
+| User-Config-Service | 83 tests unitaires et 24 tests e2e ; couverture de 100 % |
+| Serveur-API | 137 tests unitaires et 8 tests e2e ; couverture de 100 % |
 
 Les vérifications npm de compilation et de lint des services passent. Les couvertures reflètent les exclusions et seuils de chaque dépôt; elles ne signifient pas que toutes les interactions système sont couvertes. Le test des notifications exécute le module principal avec Electron simulé.
 
-Les sept vérificateurs de versions acceptent le tag correspondant et rejettent un tag incohérent. Les workflows passent actionlint et les cinq scripts shell Infra passent ShellCheck. `npm audit` (dépendances de dev comprises), relancé le 2 octobre 2026, ne signale aucune vulnérabilité dans six des sept dépôts Node (Authentification compris, pour sa CLI Prisma), et aucune de sévérité haute ou critique dans le Dashboard. Le Dashboard garde des avis de sévérité modérée ou faible sur `@tiptap/*` 2.1.13, épinglé par AdminJS et sans correctif compatible ; le bundle précompilé que sert AdminJS au navigateur embarque aussi toujours `tinymce` 6.8.2 (voir le [guide Dashboard](services/Dashboard.md#dépendances-et-audit)). La CI du Dashboard audite au seuil `high` ; la même étape est ajoutée aux CI des six autres dépôts Node par leurs branches `bugfix/ci-audit-npm`. L’audit Message-Service ne signale aucune vulnérabilité, y compris après l’ajout de Swagger (`js-yaml` forcé en 5.4.2 pour `@nestjs/swagger`).
+Les sept vérificateurs de versions acceptent le tag correspondant et rejettent un tag incohérent. Les workflows passent actionlint et les cinq scripts shell Infra passent ShellCheck. `npm audit` (dépendances de dev comprises), relancé le 2 octobre 2026, ne signale aucune vulnérabilité dans six des sept dépôts Node (Authentification compris, pour sa CLI Prisma), et aucune de sévérité haute ou critique dans le Dashboard. Le Dashboard garde des avis de sévérité modérée ou faible sur `@tiptap/*` 2.1.13, épinglé par AdminJS et sans correctif compatible ; le bundle précompilé que sert AdminJS au navigateur embarque aussi toujours `tinymce` 6.8.2 (voir le [guide Dashboard](services/Dashboard.md#dépendances-et-audit)). Les CI des dépôts Node exécutent `npm audit --audit-level=high` (à titre informatif pour Mobile, dont les avis viennent du SDK Expo). L’audit Message-Service ne signale aucune vulnérabilité, y compris après l’ajout de Swagger (`js-yaml` forcé en 5.4.2 pour `@nestjs/swagger`).
 
 ## Stack et intégration réelle
 
@@ -35,9 +36,14 @@ Une stack Docker isolée a été construite depuis les sources avec des volumes 
 - Rôles par serveur, par l’API du Gateway : dans un serveur privé, un simple membre invité ne peut pas créer de salon (403). Nommé modérateur par le propriétaire, il crée, renomme et supprime un salon, mais ne peut ni renommer ni supprimer le serveur (403). Rétrogradé, il perd de nouveau ces droits.
 - Pagination des messages du Dashboard : avec 250 DM en base, l’API AdminJS annonce un total de 250 et sert des pages de 10 jusqu’à la 25e (auparavant, seuls les 50 plus récents étaient chargés).
 
+## Parcours mobile sur appareil
+
+Le parcours mobile a été enregistré en vidéo sur deux téléphones Android physiques (Samsung S25 Ultra sous Android 16 et Samsung S9 sous Android 10), dans Expo Go (SDK 57), avec deux comptes et le backend de la stack Infra : connexion, profil, serveurs et salons, rôles et modération, messages privés, compteurs de non-lus, accusés, présence, modification d'un message, recherche et historique, perte puis reprise du réseau. La vidéo et les captures accompagnent la remise et ne sont pas versionnées.
+
 ## Portée et vérifications complémentaires
 
 - Vérifier les notifications natives hors focus avec deux fenêtres Electron sur chaque système cible. Les clients réseau automatisés ne remplacent pas cette observation.
+- Vérifier les notifications locales du mobile sur Android dans une development build : Expo Go Android ne les charge pas, seuls les badges dans l'application y sont observables.
 - Valider les installateurs desktop sur les plateformes supportées. Une compilation locale réussie ne prouve pas leur installation sur chaque système.
 - Vérifier les exécutions GitHub Actions après publication des commits et des tags. Les résultats décrits ici proviennent de validations locales.
 

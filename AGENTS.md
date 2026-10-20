@@ -4,98 +4,76 @@
 Orchestrer l'environnement Chatvardage. Ce dépôt ne contient aucune logique métier et **ne possède aucun schéma métier**.
 
 ## Responsabilités d'Infra
-- lancer PostgreSQL et Redis;
-- créer les quatre bases logiques et leurs utilisateurs/propriétaires SQL;
-- gérer réseaux, volumes, variables d'environnement et healthchecks;
-- fournir le Docker Compose racine et les scripts de santé/reset;
-- documenter l'orchestration de la stack.
+- lancer PostgreSQL et Redis ;
+- créer les quatre bases logiques et leurs utilisateurs/propriétaires SQL ;
+- gérer réseaux, volumes, variables d'environnement et healthchecks ;
+- fournir le Docker Compose racine et les scripts de santé/reset ;
+- documenter l'orchestration, l'architecture, les contrats et les scénarios de validation de toute la plateforme (Electron, mobile, services).
 
 ## Règle impérative : propriété des schémas
 Ne jamais créer dans `postgres/init` les tables métier, index métier ou données métier des services.
 - Authentification possède ses tables/migrations.
-- Room-Service possède salons/membres/invitations et ses migrations Prisma.
-- Message-Service possède conversations/messages privés et ses migrations.
+- Room-Service possède serveurs/salons/membres/invitations et ses migrations Prisma.
+- Message-Service possède messages, état de lecture et ses migrations.
 - User-Config-Service possède configurations et ses migrations.
 
 `postgres/init/00-create-databases.sh` peut créer les **bases, rôles et propriétaires**, rien de plus.
 
 ## Redis
-Redis sert au transport/temps réel et ne remplace jamais PostgreSQL. Le temps réel des messages appartient au service de messagerie. Ne pas ajouter la persistance des messages de salons dans Infra.
+Redis sert au transport temps réel et ne remplace jamais PostgreSQL. Le temps réel des messages appartient à Message-Service.
+
+## Code et scripts
+- Pas de commentaires dans les scripts, le Compose ni les Dockerfiles. Les explications vont dans le README, `docs/` ou ce fichier. Seules restent les directives d'outils (`# shellcheck disable=…`).
+- Le projet Compose s'appelle `chatvardage` ; les volumes gardent leur nom explicite `chatvardage-c2_*` pour conserver les données des postes existants. Ne pas les renommer sans procédure de migration.
 
 ## Validation obligatoire avant PR
-Exécuter :
 ```bash
-docker compose config
-docker compose down -v
-docker compose up -d --build
+docker compose config -q
+docker compose up -d --build --wait --wait-timeout 240
 docker compose ps
 ./scripts/healthcheck.sh
+./scripts/verifier-fichiers-partages.sh
 docker compose logs --no-color --tail=100 postgres redis
 ```
-Vérifier que PostgreSQL et Redis sont `healthy`. `./scripts/healthcheck.sh` vérifie les 8 services essentiels (PostgreSQL, Redis, Auth, Room, Message, User-Config, Dashboard et Serveur-API), les quatre bases configurées (présence et connexion), Redis, le Dashboard et `/api/health/upstreams` du Gateway. `./scripts/healthcheck.sh --infra` vérifie PostgreSQL, Redis et les quatre bases configurées (présence et connexion), sans sonder les services applicatifs.
+`./scripts/healthcheck.sh` vérifie les 8 services essentiels (PostgreSQL, Redis, Auth, Room, Message, User-Config, Dashboard et Serveur-API), les quatre bases (présence et connexion), Redis, le Dashboard et `/api/health/upstreams`. `--infra` se limite à PostgreSQL, Redis et aux bases.
 
-Puis valider au moins une migration réelle d'un microservice contre une base neuve. Pour Room-Service :
-```bash
-npx prisma generate
-npx prisma migrate deploy
-npm run lint
-npm test
-npm run test:e2e
-npm run build
-```
+Après une modification d'initialisation PostgreSQL, valider sur un volume neuf dans une stack isolée (voir `docs/validation.md`) : `docker compose down -v` efface les données de travail. Valider au moins une migration réelle d'un microservice contre une base neuve.
+
 Ne jamais déclarer la PR prête si une commande requise échoue.
 
-## Après modification de l'initialisation PostgreSQL
-Les scripts `/docker-entrypoint-initdb.d` ne s'exécutent que sur un volume neuf :
-```bash
-docker compose down -v
-docker compose up -d
-```
-Attention : cela efface les données locales.
-
 ## Variables et sécurité
-`.env` ne doit jamais être commité. `.env.example` contient seulement des identifiants de développement. Un service doit utiliser uniquement le compte SQL de sa propre base.
-
-Tout port publié dans `docker-compose.yml` doit être lié à `127.0.0.1` (`"127.0.0.1:PORT:PORT"`), jamais à toutes les interfaces.
-
-Les origines CORS viennent d'une seule variable de `.env`, `CORS_ORIGINS`. Tous les services, Auth-Service compris, la lisent sous ce même nom. Ne pas réintroduire une seconde variable CORS dans `.env.example`.
-
-## Revue Infra — adaptation du Dashboard : recommandations non retenues
-
-Les décisions suivantes reposent sur le code des services au moment de cette revue :
-
-- **Ne pas ajouter de secret de session connu par défaut.** `DASHBOARD_SESSION_SECRET` reste vide dans `.env.example` : `generer-env` le remplace par une valeur aléatoire, et `resoudreSecrets()` en génère une en développement si elle est vide; en production, le Dashboard refuse un secret absent ou invalide. Ne pas y mettre de marqueur : contrairement au cookie, `resoudreSecrets()` n’en rejette aucun pour la session.
-- **Ne pas créer `USER_CONFIG_SESSION_SECRET` et ne pas renommer le secret du Dashboard en secret partagé.** User-Config-Service ne consomme pas `SESSION_SECRET`; son identité HTTP provient de `x-user-id`, protégé par `INTERNAL_SERVICE_TOKEN`. L’injection inutile a été supprimée. `DASHBOARD_SESSION_SECRET` ne concerne donc que le Dashboard et son nom reste approprié.
-- **Ne pas documenter de nouvelles sessions HTTP pour User-Config-Service** dans le README ou dans la documentation d’architecture : aucun mécanisme de ce type ne figure dans son code. La suppression de la variable conserve le mécanisme existant.
-- **Ne pas retenir la qualification de faille critique pour la valeur vide à elle seule.** Dans `dashboard-chatvardage/src/main.ts`, `resoudreSecrets()` génère des secrets aléatoires en développement/test lorsque la valeur est absente et refuse une valeur absente ou trop courte en production. Le Dashboard ne signe donc pas ses sessions avec une chaîne vide dans ces cas. L’exigence ajoutée dans Compose clarifie la configuration en amont.
-
-Ces décisions ne remplacent pas les validations obligatoires avant PR indiquées plus haut.
-
-### Validation effectuée le 1er octobre 2026
-
-- Configuration Compose valide avec `DASHBOARD_SESSION_SECRET` renseigné; refus attendu avec une valeur vide.
-- Stack construite et démarrée avec `docker compose up -d --build --wait --wait-timeout 180` après `docker compose down -v`, dans le projet isolé `chatvardage-validation-6622a39`. La configuration de validation dérive de `docker compose --env-file .env.example config --format json`; seuls le nom du projet, les noms explicites des conteneurs/réseaux/volumes et les ports publiés ont été adaptés pour isoler la stack. Aucun port hôte n’est publié pendant cette validation; les accès depuis l’hôte ne sont donc pas couverts. Les volumes locaux habituels sont préservés.
-- `docker compose ps` : PostgreSQL, Redis, Auth, Room, Message, User-Config, Serveur-API et Dashboard sont `healthy`; Adminer est démarré.
-- `./scripts/healthcheck.sh` : quatre bases présentes, Redis répond `PONG`, huit services essentiels sains et `/api/health/upstreams` renvoie `ok` pour tous les services.
-- Logs PostgreSQL/Redis examinés : initialisation terminée et services prêts. Les trois migrations Prisma Room-Service ont été réellement appliquées sur la base neuve; une nouvelle exécution de `npx prisma migrate deploy` confirme qu’aucune migration ne reste à appliquer.
-- Room-Service validé dans une image Docker Node 22 construite avec la cible `build` de son Dockerfile (`npm ci` dans la cible de dépendances) : `npx prisma generate`, `npm run lint`, `npm test -- --runInBand` (196 tests), `npm run test:e2e -- --runInBand` (14 tests), `npm run build` et `npm run test:cov -- --runInBand` passent. Couverture : 100 % Statements, Branches, Functions et Lines.
-- Syntaxe des quatre scripts shell vérifiée avec `sh -n`; `./scripts/verifier-fichiers-partages.sh` confirme que les fichiers partagés sont identiques. Les scripts locaux ont été remis en LF et rendus exécutables conformément à Git et `.gitattributes`; cela ne change pas leur contenu versionné.
-- La construction du Dashboard réussit, mais affiche des avertissements `EBADENGINE` : son image Node 20 est plus ancienne que la version demandée par certaines dépendances. Corrigé depuis dans le dépôt Dashboard (images `node:22-alpine`).
-- La stack de validation et ses volumes temporaires sont supprimés après les contrôles.
-
-### Correction du CI après validation locale
-
-Le run GitHub Actions `36891758599` sur `3c301c2` a échoué à l’étape `docker compose --env-file .env.example config -q` : le modèle contient volontairement un `DASHBOARD_SESSION_SECRET` vide. La validation de la stack avec un secret fourni ne couvrait pas cette invocation du workflow.
-
-Le job `compose-et-scripts` génère maintenant un secret temporaire avec `openssl rand -hex 32`, limité à la commande de validation Compose. Aucun secret réel ni valeur fixe ne doit être ajouté à `.env.example` pour faire passer le CI. L’invocation corrigée de Compose et ShellCheck sur les quatre scripts passent localement. Le prochain run GitHub Actions reste à confirmer après publication du commit.
-
-### Suite de la revue : fins de ligne et secret de cookie
-
-- `.gitattributes` impose désormais LF aux fichiers texte (`* text=auto eol=lf`), avec une règle explicite pour les scripts shell. Les fichiers texte suivis ont été normalisés une seule fois; les modifications de fins de ligne ne changent pas leur logique.
-- La suppression du repli `DASHBOARD_COOKIE_SECRET` n’est pas retenue dans cette correction. La valeur `dashboard_cookie_secret_for_local_development` sert de marqueur de développement : `resoudreSecrets()` la remplace par un secret aléatoire en développement/test et la rejette explicitement hors de ces modes, indépendamment de sa longueur. Elle n’est donc pas acceptée en production parce qu’elle dépasse 32 caractères. La consigne précédente sur le secret de session sans valeur publique concerne `DASHBOARD_SESSION_SECRET`; elle ne signifie pas que ce marqueur de cookie est utilisé comme clé cryptographique.
-- La génération manuelle d’un `.env` reste optionnelle pour conserver des secrets locaux persistants. Elle n’est pas un prérequis : le service `generer-env` du Compose crée `.env` au premier `docker compose up`, et un clone propre doit démarrer en développement avec cette seule commande.
-- Les décisions et résultats restent dans `AGENTS.md`, conformément à la demande de cette revue. Le déplacement vers un journal séparé pourra être envisagé si les entrées s’accumulent; il n’est pas nécessaire pour cette correction.
+- `.env` ne doit jamais être commité. `.env.example` contient seulement des valeurs de développement ; `generer-env` crée `.env` avec des secrets aléatoires au premier `docker compose up`.
+- Un service utilise uniquement le compte SQL de sa propre base.
+- Tout port publié dans `docker-compose.yml` est lié à `127.0.0.1` (ou à `API_BIND_ADDRESS` pour le Gateway), jamais à toutes les interfaces par défaut. Le Gateway est aussi publié sur `[::1]` : macOS résout `localhost` en IPv6 d'abord, ne pas retirer cette ligne ni la remplacer par `3000:3000`.
+- Les origines CORS viennent d'une seule variable, `CORS_ORIGINS`, lue sous ce nom par tous les services, Auth compris.
+- Les services runtime ne montent que leur `.runtime-env/<service>` en lecture seule et le script d'entrée ; seul le bootstrap voit le `.env` principal.
 
 ## Documentation centrale
+Infra est la référence du démarrage complet, des architectures, contrats et scénarios de validation. Toute modification de contrat met à jour la référence centrale (`docs/api/`, `docs/services/`) et ses liens. Le diagramme `docs/architecture.svg` est la source de `docs/architecture.png` : régénérer le PNG après toute modification du SVG.
 
-Infra est la référence du démarrage complet, des architectures, contrats et scénarios de validation. Le README local décrit le dépôt et ses commandes; les guides détaillés sont dans `A26_5A6_01-Infra/docs/`. Toute modification de contrat doit mettre à jour la référence centrale et ses liens.
+## Choix délibérés (ne pas « corriger »)
+
+Secrets et Dashboard :
+- **`DASHBOARD_SESSION_SECRET` reste vide dans `.env.example`** : `generer-env` le remplace par une valeur aléatoire ; le Dashboard en génère une en développement et refuse une valeur absente ou trop courte en production. Le CI valide Compose avec un secret temporaire (`openssl rand -hex 32`) ; ne jamais ajouter de valeur fixe au modèle pour le faire passer.
+- **Pas de `USER_CONFIG_SESSION_SECRET` ni de secret de session partagé** : User-Config ne consomme pas `SESSION_SECRET`, son identité vient de `x-user-id` protégé par `INTERNAL_SERVICE_TOKEN`.
+- **Le repli `DASHBOARD_COOKIE_SECRET` est un marqueur de développement**, remplacé par un secret aléatoire en développement/test et rejeté explicitement ailleurs.
+
+Images et bootstrap :
+- **`USER root` des images PostgreSQL/Redis conservé** : leurs entrypoints préparent les volumes puis abaissent les privilèges. Adminer se termine par `USER www-data`.
+- **CLI Prisma appelé directement** (`node_modules/.bin/prisma` ou `build/index.js` de la version verrouillée) : npm/npx sont absents des images finales.
+- **Bootstrap root puis opérateur** : les dérivés appartiennent à `LOCAL_UID:LOCAL_GID` ; modes 0755/0644 pour les dérivés (les UID des services ne coïncident pas avec l'opérateur), parent hôte en 0700, fichier source en 0600.
+- **Gosu de l'image PostgreSQL** : limite amont documentée dans le rapport d'audit ; ne pas remplacer ce binaire à la main. `build --pull` puis rescan lors des mises à jour.
+- **`.gitattributes` impose LF** aux fichiers texte et aux scripts shell.
+- **URL de révocation Message-Service dans Compose** : elle décrit le service du réseau interne ; un deuxième réplica demanderait une revue d'architecture.
+- **Format `CLÉ=valeur`** (sans `export` ni espace avant la clé) pour les fichiers d'environnement générés ; pas d'autre grammaire.
+
+Documentation des contrats :
+- **État de lecture d'un DM** : pas d'autorisation supplémentaire ; `lecteurDm` ne consulte que l'état de l'interlocuteur dont `targetId` est l'appelant.
+- **Recherche** : pas de limite de fréquence spécifique (limite connue, documentée dans Message-Service). Aucun index ni schéma métier dans Infra.
+- **« Vu par » au-delà de 100 lecteurs** : l'API renvoie au plus 100 lecteurs récents sans total ; afficher un nombre d'autres lecteurs inventerait une information.
+- **Interlocuteur inexistant** : état vide, pas de 404 inventé ; 400 concerne un `messageId` hors conversation.
+- **Couverture Auth** : seuil de 99 % ; aucun test artificiel pour combler l'écart restant.
+- **`logout-others`** : un 401 reste possible après invalidation si le compte disparaît avant la relecture (`AuthService::deconnecter_autres`).
+
+- **Prérequis AppArmor du job de revue** : le profil provient du paquet installé sur Ubuntu 24.04 et son chargement est vérifié avant toute restauration des identifiants. Un profil manquant doit faire échouer le job ; continuer sans lui affaiblirait l’isolation pour une panne amont hypothétique.
+- **Revues sur dépôt public** : Codex doit prendre le relais pour les PR internes après échec de Copilot. Les forks restent exclus et les secrets restent dans l’environnement dédié ; une approbation manuelle systématique n’est pas imposée, car elle bloquerait le suivi automatique demandé.

@@ -69,7 +69,7 @@ et [Installation et lancement](#installation-et-lancement)).
 | **Port** (`UtilisateurRepositoryPort`) | Le code métier ne dépend que d'une interface (`domain::ports::UtilisateurRepositoryPort`), pas directement de PostgreSQL — même principe que le gateway unique (`RealGatewayRuntime`) côté frontend. Une seule implémentation en production, `PgUtilisateurRepository` (SQLx) ; il n'y a pas de mode mock exposé à l'exécution. Un second dépôt en mémoire (`FakeUtilisateurRepository`) existe, mais uniquement compilé en mode test (`#[cfg(test)]`) pour les tests HTTP de bout en bout — voir [Lancer les tests](#lancer-les-tests). |
 | **Argon2id** | Algorithme de hachage de mot de passe recommandé actuellement (résiste mieux aux attaques par GPU que bcrypt/MD5/SHA simple), calibré explicitement à 19 Mio, 2 itérations et 1 voie. Ses calculs CPU-bound sont exécutés dans le pool bloquant de Tokio afin de préserver les workers HTTP. |
 | **JWT (jsonwebtoken)** | Chaque requête porte un jeton signé, dont la signature et l'expiration sont vérifiées avant de relire l'utilisateur en base. Le rôle ne fait pas partie du jeton et doit toujours être lu depuis ce service; une suppression ou un changement de rôle prend donc effet immédiatement, sans stockage de session. |
-| **Docker multi-stage** | Une étape compile le binaire Rust avec `rust:1.88.0-slim-bookworm`, une autre installe la CLI Prisma avec `node:22-bookworm-slim` (Node.js 22, comme les autres services ; Prisma figé à la version exacte) et exécute `npx prisma generate` ; l'image finale embarque le binaire Rust compilé, Node.js et `prisma/` pour exécuter `npx prisma migrate deploy` au démarrage avant de lancer le binaire — même séquence que les microservices Node de l'équipe (voir [Installation et lancement](#installation-et-lancement)), adaptée à un runtime Rust. |
+| **Docker multi-stage** | Une étape compile le binaire Rust avec `rust:1.88.0-alpine` (binaire statique musl), une autre installe la CLI Prisma avec `node:22-alpine` (Node.js 22, comme les autres services ; Prisma figé à la version exacte) et exécute `npx prisma generate` ; l'image finale embarque le binaire Rust compilé, Node.js et `prisma/` pour exécuter `./node_modules/.bin/prisma migrate deploy` au démarrage avant de lancer le binaire — même séquence que les microservices Node de l'équipe (voir [Installation et lancement](#installation-et-lancement)), adaptée à un runtime Rust. |
 
 ## Architecture du service
 
@@ -156,8 +156,7 @@ model Utilisateur {
 }
 ```
 
-Deux détails délibérément différents des exemples Prisma habituels (voir
-les commentaires dans `prisma/schema.prisma` pour le détail) :
+Deux détails délibérément différents des exemples Prisma habituels :
 
 - `dbgenerated("gen_random_uuid()")`, pas `@default(uuid())` : ce dernier
   génère l'UUID côté client Prisma — jamais appelé au runtime ici — donc
@@ -252,7 +251,7 @@ migration Prisma en local, il faut en plus :
 > 1.85. Avec une version plus ancienne, `cargo build`/`cargo run` échoue
 > avec une erreur du type `feature 'edition2024' is required`. Le
 > `Dockerfile` utilise l'image précisément versionnée
-> `rust:1.88.0-slim-bookworm`, qui satisfait ce prérequis et rend les builds
+> `rust:1.88.0-alpine`, qui satisfait ce prérequis et rend les builds
 > Docker reproductibles. C'est seulement en local, hors Docker, que ta
 > version installée compte.
 
@@ -350,7 +349,7 @@ Résumé :
 |----------|------|
 | `DATABASE_URL` | Chaîne de connexion PostgreSQL — **toujours requise**, aucune valeur par défaut (lue à la fois par Prisma pour les migrations et par SQLx au runtime). Format : `postgresql://<user>:<mot_de_passe>@<hôte>:5432/<base>`. Ex. local : `postgres://chatvardage:chatvardage@localhost:5432/chatvardage_auth` ; dans le réseau Docker d'`infra` : `postgresql://auth_service:auth_service_dev@postgres:5432/chatvardage_auth`. Le suffixe `?schema=public` (convention Prisma) est **volontairement omis** : testé et accepté par SQLx, qui l'ignore avec un simple avertissement (`ignoring unrecognized connect parameter`) plutôt qu'une erreur — inutile de toute façon puisque `public` est déjà le schéma par défaut de PostgreSQL. |
 | `JWT_SECRET` | Secret de signature des JWT — **toujours requis, au moins 32 caractères (256 bits)** (le service refuse de démarrer sinon, y compris si la variable existe mais est vide — voir `config.rs`). Générer avec `openssl rand -hex 32` (64 caractères). **Utiliser un secret propre à chaque environnement**, ne jamais committer un vrai secret. |
-| `JWT_DUREE_DE_VIE_HEURES` | Durée de validité d'un jeton en heures (défaut : 24h, doit être comprise entre 1 et 720 — 30 jours). Le rôle et l'existence de l'utilisateur sont revérifiés en base à chaque route protégée, donc une durée élevée ne conserve pas les droits d'un compte supprimé ou rétrogradé. |
+| `JWT_DUREE_DE_VIE_HEURES` | Configuration historique (1 à 720 heures) conservée pour les JWT sans famille; les nouvelles sessions login/register/refresh émettent un accès de 15 minutes. Les JWT historiques déjà émis restent acceptés jusqu'à expiration/révocation. |
 | `PORT` | Port HTTP du service et du mapping du Compose autonome (défaut : `3001`). Avec `PORT=3099`, l'API est exposée sur `http://localhost:3099` et son healthcheck interroge ce même port. |
 | `RUST_LOG` | Niveau de journalisation (`tracing-subscriber`) — `error`/`warn`/`info`/`debug`/`trace` (défaut : `info`) |
 | `SERVICES_COMPTE_SUPPRIME_URLS` | URL de base des services à prévenir d'une suppression de compte, séparées par des virgules (ex. `http://room-service:3003,http://message-service:3004,http://user-config-service:3005`). Absente : aucun service prévenu (avertissement journalisé à chaque suppression). |
@@ -447,6 +446,7 @@ Documentation complète (requêtes, réponses, codes d'erreur) dans
 | PATCH | `/api/auth/me` | oui | Modifier son propre profil (pseudo/mot de passe ; le courriel n'est pas modifiable) |
 | DELETE | `/api/auth/me` | oui | Supprimer son propre compte (les autres services sont prévenus) |
 | POST | `/api/auth/logout-all` | oui | Se déconnecter partout (invalide tous ses jetons) |
+| POST | `/api/auth/logout-others` | oui | Déconnecter les autres appareils (invalide tous ses jetons, nouvelle session pour l'appareil courant) |
 | GET | `/api/users/lookup` | oui (tout utilisateur, pas seulement admin) | Résoudre `{id -> pseudo}` en lot pour d'autres comptes |
 | GET | `/api/users/search` | oui (tout utilisateur, pas seulement admin) | Chercher des comptes par début de pseudo (`{id, pseudo}` seulement) |
 | GET | `/api/users` | admin | Lister les comptes |
@@ -499,9 +499,7 @@ voir [Endpoints de l'API](#endpoints-de-lapi) — sans repasser par SQL.
 
 ## Limites connues et pistes d'amélioration
 
-- Pas de renouvellement de jeton (refresh token) : un jeton expiré oblige
-  à se reconnecter. Acceptable pour la portée du contrôle (24h de durée de
-  vie par défaut).
+- Renouvellement réel par `/api/auth/refresh` : rotation atomique PostgreSQL, famille de 30 jours, JWT de 15 minutes. `/api/auth/logout` révoque une famille. Voir [le contrat](../api/authentification.md#sessions-renouvelables--register-login-refresh-et-logout).
 - La limitation de débit de `/api/auth/login` et `/api/auth/register`
   relève du `Serveur-API` : le Gateway, point d'entrée unique, doit
   limiter ces routes publiques avant qu'elles ne déclenchent un hachage
@@ -544,3 +542,7 @@ voir [Endpoints de l'API](#endpoints-de-lapi) — sans repasser par SQL.
   requise au moment de la compilation elle-même — seulement à
   l'exécution et pour les tests de `pg_utilisateur_repository` (voir
   [Lancer les tests](#lancer-les-tests)).
+
+## Image Docker
+
+Rust est compilé statiquement avec musl (`musl-dev` dans le builder). Les stages Prisma et runtime utilisent Node 22 Alpine ; le runtime applique les correctifs disponibles, garde les fichiers applicatifs propriété de root et lisibles par `node`, et démarre sous `node` (UID 1000). npm et npx sont absents : `./node_modules/.bin/prisma`, vérifié au build, applique les migrations avant de lancer le serveur. Reconstruire avec `--pull` pour recevoir les nouvelles images de base. Le CI construit l'image après les contrôles Rust ; la couverture exigée est de 99 % des lignes hors `main.rs`.

@@ -253,3 +253,9 @@ La couverture Jest est bloquante à 100 % pour Statements, Branches, Functions e
 L'override `multer` force une version corrigée de cette dépendance transitive utilisée par `@nestjs/platform-express`; il est conservé pour éviter de réintroduire une version vulnérable lors d'une résolution de dépendances. L'ancien override `deepmerge-ts` a été retiré puisqu'aucune dépendance du lockfile actuel ne l'utilise.
 
 Voir aussi [`docs/API.md`](https://github.com/Chatvardage/A26_5A6_01-Serveur-API/blob/main/docs/API.md) et [`AGENTS.md`](https://github.com/Chatvardage/A26_5A6_01-Serveur-API/blob/main/AGENTS.md).
+
+### Sessions mobiles
+
+`POST /api/auth/refresh` et `POST /api/auth/logout` sont relayés tels quels à Auth,
+sans Bearer et avec le refresh token dans le corps JSON. Le quota Auth par IP et
+route protège ces appels publics. Le Gateway ne décode jamais ces tokens.

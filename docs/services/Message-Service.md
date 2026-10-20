@@ -2,7 +2,8 @@
 
 Microservice des messages de Chatvardage. Gère à la fois les
 messages privés (DM) entre deux utilisateurs et les messages de salon
-(channels), en réutilisant exactement la même architecture pour les deux.
+(channels), en réutilisant exactement la même architecture pour les deux,
+ainsi que l'état de lecture (messages non lus) et la recherche.
 
 ## Responsabilité
 
@@ -10,7 +11,7 @@ PostgreSQL est la source de vérité. Après une écriture réussie, Message-Ser
 
 `PostgreSQL -> Redis PUBLISH -> Redis SUBSCRIBE -> Socket.IO`
 
-Redis ne remplace jamais la persistance. Après une reconnexion, le client recharge l'historique par l'API REST.
+Redis ne remplace jamais la persistance. Si la publication échoue ou n'aboutit pas en 2 s de connexion et 2 s de commande (`DELAI_COMMANDE_MS`), l'écriture reste confirmée au client et l'échec est journalisé avec l'identifiant du message. Après une reconnexion, le client recharge l'historique par l'API REST.
 
 ## Authentification
 
@@ -51,6 +52,10 @@ avec l'en-tête `x-internal-token: {INTERNAL_SERVICE_TOKEN}`, et reçoit
 - Modification / suppression : `peutLire` requis (un membre expulsé ne touche plus à ses messages), puis être l’auteur pour modifier; pour supprimer, être l’auteur ou disposer de `peutModerer`.
 - Salon introuvable : **404** ; Room-Service indisponible, en timeout, ou `INTERNAL_SERVICE_TOKEN` absent ou refusé : **503** ; réponse 2xx au format inattendu : **502**.
 
+Pour la recherche et les messages non lus, Message-Service demande aussi la liste des salons lisibles par l'utilisateur :
+`GET {ROOM_SERVICE_URL}/api/internal/users/:userId/channels?role=<rôle global>` (même jeton), qui renvoie
+`{ salons: [{ salonId, serveurId, depuis }] }` (`depuis` : arrivée dans le serveur, ou `null`). Cette liste est mémorisée `ROOM_ACCESS_CACHE_TTL_MS` et oubliée à chaque changement de serveur. Room-Service indisponible : **503**.
+
 Le rôle global transmis (`admin` \| `utilisateur`) est celui qu'Auth-Service a renvoyé pour le JWT ; seul `admin` a des droits particuliers côté Room-Service. Les modérateurs sont ceux de chaque serveur.
 
 Un accès obtenu est mémorisé `ROOM_ACCESS_CACHE_TTL_MS` millisecondes (10 000 par défaut, `0` pour interroger Room-Service à chaque fois), par salon, utilisateur et rôle. Chaque changement de serveur signalé par Room-Service (voir « Changements de serveur ») oublie aussitôt tous les accès à ce serveur, avant la revérification des sockets : une expulsion ou un salon rendu réservé est donc pris en compte immédiatement. Les erreurs ne sont jamais mémorisées.
@@ -80,7 +85,8 @@ La description OpenAPI interactive (Swagger) est disponible sur `http://localhos
 - `GET /api/health` — santé PostgreSQL/Redis (public)
 - `POST /api/messages` — créer un DM (JWT requis)
 - `GET /api/messages/history/:otherUserId?limit=50&cursor=<messageId>` — historique paginé (JWT requis, limite 1..100)
-- `GET /api/messages/conversations` — lister les conversations DM de l'utilisateur authentifié, triées par activité la plus récente (JWT requis)
+- `GET /api/messages/conversations` — lister les conversations DM de l'utilisateur authentifié, triées par activité la plus récente, avec leurs non-lus (JWT requis)
+- `PUT /api/messages/conversations/:otherUserId/read` — marquer la conversation comme lue (voir « Messages non lus »)
 - `GET /api/messages/:id` — récupérer un DM auquel l'utilisateur participe
 - `PATCH /api/messages/:id` — modifier son propre DM
 - `DELETE /api/messages/:id` — supprimer son propre DM
@@ -105,7 +111,8 @@ Le destinataire d'un DM (REST ou `private-message.send`) doit exister : Message-
       "content": "Salut!",
       "createdAt": "2026-09-23T00:00:00.000Z",
       "updatedAt": "2026-09-23T00:00:00.000Z"
-    }
+    },
+    "unreadCount": 2
   }
 ]
 ```
@@ -131,6 +138,7 @@ Création :
 - `POST /api/messages/rooms/:roomId/admin` — créer un message au nom d'un utilisateur (admin requis ; corps `{ "authorId": "uuid", "content": "..." }`). L'admin doit pouvoir écrire dans le salon ; l'auteur doit exister, en être membre et pouvoir y écrire, droits évalués avec son rôle global réel (lu par `GET /api/users/:id` d'Authentification avec le jeton de l'admin). La limite d'envoi est celle de l'auteur, décomptée seulement une fois la requête validée (auteur existant, accès de l'admin et de l'auteur). La création est journalisée avec l'ID admin, l'ID du message, le salon et l'auteur, sans contenu.
 - `GET /api/messages/rooms/:roomId/history?limit=50&cursor=<messageId>` — historique paginé (JWT requis, membre du salon requis, limite 1..100)
 - `GET /api/messages/rooms/:roomId/:id` — récupérer un message du salon (n'importe quel membre du salon, pas seulement l'auteur)
+- `PUT /api/messages/rooms/:roomId/read` — marquer le salon comme lu (lecture du salon requise)
 - `PATCH /api/messages/rooms/:roomId/:id` — modifier son propre message de salon
 - `DELETE /api/messages/rooms/:roomId/:id` — supprimer son propre message de salon
 
@@ -143,6 +151,61 @@ Création :
 ```
 
 `content` est obligatoire et limité à 4000 caractères, en REST comme en WebSocket. Contrairement aux DM, la lecture (`GET`) n'est pas limitée à l'auteur : tout membre du salon peut consulter tous les messages du salon. Seul l'auteur peut modifier son message ; il peut le supprimer, tout comme un **modérateur du serveur** (ou son propriétaire, un admin) — droit calculé par Room-Service (`peutModerer` de la route d'accès).
+
+### Messages non lus et état de lecture
+
+L'état de lecture est persisté dans PostgreSQL (`ConversationReadState`, une ligne par utilisateur et conversation) : il survit au redémarrage du service et est partagé entre les appareils d'un même compte. Redis n'y joue aucun rôle. Les conversations sont identifiées comme dans le client mobile : `dm:<interlocuteur>` et `room:<salon>`.
+
+Un message est **non lu** s'il a été écrit par quelqu'un d'autre après le dernier message marqué comme lu. Ses propres messages ne comptent jamais. Sans état de lecture :
+
+- **DM** : tous les messages reçus sont non lus ;
+- **salon** : seulement ceux écrits depuis l'arrivée dans le serveur (`depuis`, fourni par Room-Service), pour qu'un nouvel arrivant ne voie pas tout l'historique en non-lus. Si cette date est inconnue (admin global non membre, serveur par défaut pas encore rejoint), le salon ne compte qu'après une première lecture.
+
+| Méthode | Route | Effet |
+|---|---|---|
+| GET | `/api/messages/unread` | `{ "counts": { "dm:<id>": 2, "room:<id>": 5 } }` pour les DM et les salons lisibles ; seules les conversations avec des non-lus sont présentes. 503 si Room-Service ne répond pas |
+| GET | `/api/messages/activity` | `{ "rooms": { "room:<id>": "<date du dernier message>" } }` pour les salons lisibles (une requête groupée) ; les salons sans message sont absents. Sert à trier les serveurs du plus actif au moins actif. 503 si Room-Service ne répond pas |
+| PUT | `/api/messages/conversations/:otherUserId/read` | Marque le DM comme lu |
+| PUT | `/api/messages/rooms/:roomId/read` | Marque le salon comme lu ; 403 sans droit de lecture, 404 salon inconnu |
+
+Corps facultatif des deux `PUT` : `{ "messageId": "<uuid>" }`, le dernier message lu, qui doit appartenir à la conversation (**400** sinon). Sans corps, la conversation est lue jusqu'à son message le plus récent. L'état **ne recule jamais** : marquer un message plus ancien (un autre appareil en retard) ne change rien. Réponse :
+
+```json
+{ "conversationId": "dm:uuid-interlocuteur", "lastReadAt": "2026-10-06T12:02:00.000Z", "unreadCount": 1 }
+```
+
+`lastReadAt` vaut `null` pour une conversation vide jamais lue.
+
+#### Accusés de lecture
+
+| Méthode | Route | Réponse |
+|---|---|---|
+| GET | `/api/messages/conversations/:otherUserId/read-state` | `{ userId, lastReadAt }` : jusqu'où l'interlocuteur a lu la conversation (`null` : jamais) |
+| GET | `/api/messages/rooms/:roomId/read-states` | `{ lecteurs: [{ userId, lastReadAt }] }` : les autres lecteurs du salon, du plus récent au plus ancien, 100 au plus ; lecture du salon requise (403/404) |
+
+Chaque avancée réelle d'un état de lecture est publiée sur Redis **après** l'écriture en base, puis émise par Socket.IO : `read-state.updated` `{ kind: 'dm' | 'room', targetId, userId, lastReadAt }` (`userId` a lu la conversation `targetId` jusqu'à `lastReadAt`). Pour un DM, l'événement va aux deux personnes : l'autre met à jour ses accusés de lecture, les autres appareils du lecteur effacent leurs non-lus. Pour un salon, il va aux sockets qui l'ont rejoint (« Vu par »). Un marquage qui ne fait pas avancer l'état ne publie rien.
+
+Limite connue : un ancien membre d'un salon qui l'avait lu peut encore figurer parmi ses lecteurs (filtrer demanderait d'interroger Room-Service à chaque fois).
+
+### Recherche
+
+`GET /api/messages/search?q=<texte>&limit=20&cursor=<nextCursor>&conversationId=<dm:… | room:…>` (JWT requis) cherche `q` (2 à 100 caractères après retrait des espaces) dans le contenu, sans tenir compte de la casse. `%` et `_` sont pris littéralement. Seules les conversations accessibles sont lues : les DM dont l'utilisateur est expéditeur ou destinataire, et les salons qu'il peut lire selon Room-Service. Si Room-Service ne répond pas, la recherche échoue (**503**) au lieu de renvoyer des résultats incomplets.
+
+`conversationId` (facultatif) limite la recherche à une seule conversation : `dm:<interlocuteur>` (messages échangés avec lui) ou `room:<salon>` (droit de lecture vérifié auprès de Room-Service : **403** sinon, **404** pour un salon inconnu). Une autre forme donne **400**. C'est ce qu'utilise le client desktop (recherche dans le salon ou la conversation affichée) ; sans ce paramètre, la recherche couvre toutes les conversations accessibles.
+
+```json
+{
+  "results": [
+    { "conversationId": "room:uuid-salon", "kind": "room", "message": { "id": "…", "roomId": "…", "authorId": "…", "content": "…", "createdAt": "…", "updatedAt": "…" } },
+    { "conversationId": "dm:uuid-interlocuteur", "kind": "dm", "message": { "id": "…", "senderId": "…", "recipientId": "…", "content": "…", "createdAt": "…", "updatedAt": "…" } }
+  ],
+  "nextCursor": "MjAyNi0xMC0wNlQxMjowMjowMC4wMDBafG0y"
+}
+```
+
+Résultats du plus récent au plus ancien (`limit` 1 à 50, 20 par défaut). `nextCursor` est opaque (position `createdAt`/`id` du dernier résultat) et vaut `null` à la fin : la page suivante ne contient ni doublon ni trou, même si des messages arrivent entre-temps. Curseur invalide : **400**.
+
+Limite connue : la recherche est un `ILIKE '%…%'` sans index plein texte. Elle convient au volume du projet ; un index trigramme (`pg_trgm`) serait nécessaire pour de gros historiques.
 
 ### Limite d'envoi
 
@@ -161,6 +224,7 @@ Namespace Socket.IO : `/messages`.
 - `private-message.created`
 - `private-message.updated`
 - `private-message.deleted`
+- `read-state.updated` (accusé de lecture, voir « Messages non lus et état de lecture »)
 
 Après validation du JWT par Auth-Service, le client est placé dans la room `user:<id>` correspondant à l'utilisateur authentifié. Il ne choisit donc pas son identité.
 
@@ -181,7 +245,7 @@ Après validation du JWT par Auth-Service, le client est placé dans la room `us
 
 ### Indicateur de frappe (typing)
 
-Événement client `typing` `{ scope: 'room' | 'dm', targetId, isTyping }` : relayé directement, **sans persistance ni passage par Redis/PostgreSQL** (best-effort, éphémère). La cible est `room:<targetId>` pour `scope: 'room'` (ignoré si le socket n'a pas rejoint cette room) ou `user:<targetId>` pour `scope: 'dm'`. Le serveur réémet `typing` avec `{ userId, scope, targetId, isTyping }` à tous les clients de cette room, sauf l'émetteur. **Limite par socket et par cible** (`DELAI_MIN_SAISIE_MS`, 1 s) : un changement d'état (commence / arrête d'écrire) est toujours relayé, mais le même état répété (un envoi par frappe côté client) au plus une fois par seconde — un message privé pouvant viser n'importe qui, un client ne peut pas inonder un autre utilisateur.
+Événement client `typing` `{ scope: 'room' | 'dm', targetId, isTyping }` : relayé directement, **sans persistance ni passage par Redis/PostgreSQL** (best-effort, éphémère). La cible est `room:<targetId>` pour `scope: 'room'` (ignoré si le socket n'a pas rejoint cette room) ou `user:<targetId>` pour `scope: 'dm'`. Le serveur réémet `typing` avec `{ userId, scope, targetId, isTyping }` à tous les clients de cette room, sauf l'émetteur. **Limite par socket et par cible** (`DELAI_MIN_SAISIE_MS`, 1 s) : un changement d'état (commence / arrête d'écrire) est toujours relayé, mais le même état répété (un envoi par frappe côté client) au plus une fois par seconde. Le cache conserve au plus 1 000 cibles par socket ; une nouvelle cible remplace la plus ancienne au-delà. Cette déduplication ne limite pas les changements d’état alternés.
 
 Le chemin de diffusion pour les messages persistés (DM et salon) est :
 
@@ -288,8 +352,9 @@ messages dont le contexte n'existe plus :
 
 | Méthode | Route | Appelée par | Effet |
 |---|---|---|---|
-| POST | `/api/internal/salons-supprimes` `{ salonIds }` (500 au plus) | Room-Service, après la suppression d'un salon ou d'un serveur | Messages de ces salons. Réponse `{ messagesSalons }` |
-| DELETE | `/api/internal/users/:userId` | Authentification, après la suppression d'un compte | Ses conversations privées (dans les deux sens) et les messages de salon qu'il a écrits. Réponse `{ messagesPrives, messagesSalons }` |
+| POST | `/api/internal/salons-supprimes` `{ salonIds }` (500 au plus) | Room-Service, après la suppression d'un salon ou d'un serveur | Messages et états de lecture de ces salons. Réponse `{ messagesSalons }` |
+| POST | `/api/internal/users/:userId/sessions-revoquees` | Authentification, après un changement de mot de passe, une déconnexion (tous ou autres appareils), un changement de rôle ou une suppression de compte | Publie `sessions.revoquees` : chaque instance revérifie sans cache les sockets de ce compte et ferme (après `session.revoquee`) ceux dont le jeton est révoqué. Réponse `202 { accepte: true }` |
+| DELETE | `/api/internal/users/:userId` | Authentification, après la suppression d'un compte | Ses conversations privées (dans les deux sens), les messages de salon qu'il a écrits, ses états de lecture et ceux des autres sur leurs DM avec lui. Réponse `{ messagesPrives, messagesSalons }` |
 
 Aucun événement temps réel n'est émis : les clients ouverts voient les
 messages effacés disparaître au prochain chargement.
@@ -370,6 +435,8 @@ Le résultat attendu lorsque tout fonctionne est :
 - `redis=ok`
 
 En cas de panne partielle, l'endpoint retourne **HTTP 503** avec `status=degraded` et indique séparément l'état de PostgreSQL et Redis.
+
+Les tests d'intégration (`npm run test:integration`, PostgreSQL réel et base jetable `*_test`) vérifient les requêtes des non-lus et de la recherche ainsi que la conservation de l'état de lecture après un redémarrage ; voir le README du dépôt.
 
 Avant une PR, exécuter :
 

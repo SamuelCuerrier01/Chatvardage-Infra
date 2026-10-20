@@ -1,9 +1,6 @@
 #!/bin/sh
 set -eu
 
-# Usage : ./scripts/healthcheck.sh [--infra]
-# Sans option : vérifie les 8 services requis, les 4 bases, Redis, Dashboard et Gateway.
-# --infra : vérifie uniquement PostgreSQL, les 4 bases et Redis.
 infra_only=0
 for arg in "$@"; do
   case "$arg" in
@@ -21,7 +18,6 @@ else
   required_services="postgres redis auth-service room-service message-service user-config-service dashboard serveur-api"
 fi
 
-# Vérifie d'abord que chaque conteneur requis existe, tourne et est healthy.
 failed=0
 for service in $required_services; do
   if ! container_id=$(docker compose ps -q "$service" | head -n 1); then
@@ -56,7 +52,6 @@ if ! docker compose exec -T postgres sh -c 'pg_isready -U "$POSTGRES_USER" -d po
 fi
 
 echo "== Databases =="
-# Les noms attendus viennent de l'environnement réel du conteneur, pas de valeurs codées en dur.
 if ! docker compose exec -T postgres sh -c '
 set -eu
 actual=$(psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d postgres -Atc "SELECT datname FROM pg_database ORDER BY datname;")
@@ -65,7 +60,6 @@ for db in "$AUTH_DB" "$ROOMS_DB" "$MESSAGES_DB" "$CONFIG_DB"; do
     echo "$db : absente" >&2
     exit 1
   fi
-  # Présente ne suffit pas : connexion réelle à la base.
   psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$db" -Atc "SELECT 1" >/dev/null
   echo "$db : présente et accessible"
 done
@@ -75,9 +69,8 @@ done
 fi
 
 echo "== Redis =="
-# Charge le mot de passe généré dans /infra/.env à l'intérieur du conteneur.
 if ! redis_reply=$(docker compose exec -T redis sh -c \
-  'set -a; . /infra/.env; set +a; REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping'); then
+  'set -a; . /run/chatvardage/.env; set +a; REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping'); then
   echo "Impossible d'interroger Redis." >&2
   exit 1
 fi

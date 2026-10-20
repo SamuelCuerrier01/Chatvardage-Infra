@@ -1,10 +1,10 @@
 # Chatvardage — Infrastructure et documentation
 
-Point de départ du projet complet : client Electron, API Gateway, quatre services métier, Dashboard d’administration, PostgreSQL et Redis. Ce dépôt orchestre les conteneurs et rassemble la documentation. Chaque service conserve son code, ses tests et ses migrations.
+Point de départ du projet complet : client Electron, application mobile Expo, API Gateway, quatre services métier, Dashboard d’administration, PostgreSQL et Redis. Ce dépôt orchestre les conteneurs et rassemble la documentation. Chaque service conserve son code, ses tests et ses migrations.
 
 ## Prérequis
 
-- Git et accès aux huit dépôts privés de l’organisation **Chatvardage**.
+- Git et accès aux neuf dépôts privés de l’organisation **Chatvardage**.
 - Docker Engine 25+ / Docker Desktop avec Compose v2; Docker démarré.
 - Bash sous Linux/macOS ou WSL sous Windows pour les scripts. Les commandes ci-dessous sont en Bash/WSL.
 - Pour le client desktop depuis les sources : Node.js 22, npm et un bureau graphique. Le backend n’exige ni Rust, ni Node, ni PostgreSQL installés sur l’hôte.
@@ -12,18 +12,18 @@ Point de départ du projet complet : client Electron, API Gateway, quatre servic
 
 ## Installation complète
 
-Cloner les huit dépôts ci-dessous côte à côte.
+Cloner les neuf dépôts ci-dessous côte à côte (ou lancer `scripts/pull-clone-all.sh`, voir [son guide](scripts/info-pull-clone.md)).
 
 ```bash
 mkdir Chatvardage
 cd Chatvardage
-for repo in Infra Frontend Serveur-API Authentification Room-Service Message-Service User-Config-Service Dashboard; do
+for repo in Infra Frontend Mobile Serveur-API Authentification Room-Service Message-Service User-Config-Service Dashboard; do
   git clone --branch main "git@github.com:Chatvardage/A26_5A6_01-$repo.git"
 done
 cd A26_5A6_01-Infra
 ```
 
-Aucun `.env` à préparer : au premier `docker compose up`, le service `generer-env` (conteneur Alpine) exécute `scripts/generer-env.sh`. Il crée `.env` à partir de `.env.example` avec dix secrets aléatoires distincts (PostgreSQL, Redis, JWT, jeton interne, Dashboard). Les autres services attendent cette étape, puis chargent ce fichier au démarrage. Un `.env` existant est conservé : les secrets restent stables d’un démarrage à l’autre.
+Aucun `.env` à préparer : au premier `docker compose up`, le service `generer-env` (conteneur Alpine) exécute `scripts/generer-env.sh`. Il crée `.env` à partir de `.env.example` avec dix secrets aléatoires distincts (PostgreSQL, Redis, JWT, jeton interne, Dashboard). `preparer-env-services.sh` prépare ensuite `.runtime-env/<service>/.env` avec les seules variables autorisées pour chaque conteneur. Le fichier principal reste privé (0600), le dossier `.runtime-env` aussi (0700); aucun service applicatif ne monte le dossier Infra complet. Un `.env` existant est conservé : les secrets restent stables d’un démarrage à l’autre. `LOCAL_UID`/`LOCAL_GID` valent 1000 par défaut : adapter ces valeurs à l'opérateur Linux si nécessaire.
 
 Pour régénérer les secrets : `./scripts/generer-env.sh --force` (ou `.\scripts\generer-env.ps1 -Force` en PowerShell). PostgreSQL et Redis gardent alors les anciens identifiants dans leurs volumes : réinitialiser les volumes (`docker compose down -v`, qui efface les données) avant de redémarrer. Le `.env` généré ne doit jamais être commité. Ce Compose sert au développement local; ce n’est pas un déploiement de production.
 
@@ -33,6 +33,7 @@ Pour reproduire une version, utiliser les tags ou commits validés indiqués dan
 Chatvardage/
 ├── A26_5A6_01-Infra/                 # lancer Compose ici
 ├── A26_5A6_01-Frontend/
+├── A26_5A6_01-Mobile/
 ├── A26_5A6_01-Serveur-API/
 ├── A26_5A6_01-Authentification/
 ├── A26_5A6_01-Room-Service/
@@ -94,34 +95,7 @@ docker compose up -d --wait --wait-timeout 240
 ./scripts/healthcheck.sh
 ```
 
-### Résultats consignés (2 octobre 2026)
-
-Clone propre sans `.env`, volumes neufs : `docker compose up --build -d --wait`, puis `./scripts/healthcheck.sh` :
-
-```text
-postgres : running healthy
-redis : running healthy
-auth-service : running healthy
-room-service : running healthy
-message-service : running healthy
-user-config-service : running healthy
-dashboard : running healthy
-serveur-api : running healthy
-== PostgreSQL ==
-/var/run/postgresql:5432 - accepting connections
-== Databases ==
-chatvardage_auth : présente et accessible
-chatvardage_rooms : présente et accessible
-chatvardage_messages : présente et accessible
-chatvardage_config : présente et accessible
-== Redis ==
-PONG
-== Dashboard ==
-== Gateway (upstreams) ==
-Stack OK
-```
-
-`./scripts/healthcheck.sh --infra` répond `Infrastructure OK`. Sur la même stack, deux clients Socket.IO authentifiés via le Gateway ont reçu le même `private-message.created`. Un DM envoyé pendant la déconnexion de B est revenu par `GET /api/messages/history/:id` après sa reconnexion. Le détail des vérifications est dans le [rapport de validation](docs/rapport-validation.md).
+Le détail des vérifications de bout en bout (Socket.IO entre deux clients, rattrapage après reconnexion) est dans le [rapport de validation](docs/rapport-validation.md).
 
 | Point d’accès local | Usage |
 |---|---|
@@ -134,9 +108,18 @@ Stack OK
 | http://localhost:3005/docs | Swagger User-Config-Service |
 | http://localhost:8081 | Adminer, inspection PostgreSQL en développement (serveur `postgres`, identifiants `POSTGRES_SUPERUSER` / `POSTGRES_SUPERPASS` du `.env`) |
 
-Tous les ports publiés sont liés à `127.0.0.1`. Deux clients sur **le même poste**, avec deux profils Electron, conviennent à la démonstration. Les autres postes du réseau ne peuvent pas joindre cette configuration telle quelle.
+Tous les ports publiés sont liés à `127.0.0.1` ; le Gateway l’est aussi à `[::1]`, car macOS résout `localhost` en IPv6 d’abord. Deux clients sur **le même poste**, avec deux profils Electron, conviennent à la démonstration. Les autres postes du réseau ne peuvent pas joindre cette configuration telle quelle.
 
-## Ouvrir le client
+### Projet Compose renommé
+
+Le projet Compose s’appelle `chatvardage` (auparavant `chatvardage-c2`). Les volumes gardent leur nom `chatvardage-c2_postgres_data` et `chatvardage-c2_redis_data` : les données sont conservées. Sur un poste où l’ancienne stack tourne encore, l’arrêter une fois sous son ancien nom avant de relancer, sinon les noms de conteneurs entrent en conflit :
+
+```bash
+docker compose -p chatvardage-c2 down
+docker compose up --build -d --wait --wait-timeout 240
+```
+
+## Ouvrir le client desktop
 
 ```bash
 cd ../A26_5A6_01-Frontend
@@ -147,6 +130,10 @@ CHATVARDAGE_PROFIL=2 node scripts/start.js
 ```
 
 Créer deux comptes distincts dans l’application. Le backend ciblé est `http://localhost:3000`. Sur une installation propre, la connexion est nécessaire; une session valide persistée ouvre ensuite le clavardage sans passage par le panneau de configuration.
+
+## Ouvrir l’application mobile
+
+Voir le [README du dépôt Mobile](https://github.com/Chatvardage/A26_5A6_01-Mobile#d%C3%A9marrage) : `npm ci`, `npm test`, puis `npx expo start` (ou `npm start` sous WSL2). Un téléphone ne joint pas `127.0.0.1` : le README Mobile décrit la redirection du port 3006 vers le Gateway et la variable `EXPO_PUBLIC_API_URL`.
 
 ## Si node n'est pas installé
 
@@ -199,11 +186,11 @@ docker compose logs --tail=100 auth-service room-service message-service user-co
 ```
 
 - `.env` invalide ou incomplet : le corriger, ou le régénérer avec `./scripts/generer-env.sh --force` puis réinitialiser les volumes (voir plus haut).
-- Chemin de build absent : vérifier les huit dossiers voisins, particulièrement Dashboard.
+- Chemin de build absent : vérifier que les dépôts des services sont clonés à côté d’Infra, particulièrement Dashboard.
 - Port occupé : arrêter l’autre environnement ou choisir des ports distincts dans une configuration de test.
 - API saine mais connexion impossible : examiner Auth et les migrations; un healthcheck ne crée pas de compte.
 - JWT expiré/révoqué : se reconnecter; les droits des services peuvent être mémorisés 10 s.
-- Redis indisponible : un message peut déjà être écrit en base avant l’échec de publication. Relire l’historique avant de réessayer pour éviter un doublon; il n’y a pas de transaction distribuée ni de file de reprise durable.
+- Redis indisponible : l’écriture en base est confirmée au client (au plus 4 s plus tard) et Message-Service journalise la publication perdue. Les autres clients voient le changement à leur prochaine lecture REST; il n’y a pas de transaction distribuée ni de file de reprise durable.
 - Notifications sous WSL : l’affichage natif dépend de D-Bus/du bureau. L’application possède un repli visuel; vérifier les notifications sur l’OS cible.
 
 `docker compose down` conserve les volumes. **`./scripts/reset.sh` et `docker compose down -v` effacent les données** : réserver ces commandes à un environnement jetable. Pour une validation propre, utiliser le protocole isolé de `docs/validation.md`.
@@ -212,7 +199,7 @@ docker compose logs --tail=100 auth-service room-service message-service user-co
 
 ![Schéma applications et conteneurs](docs/architecture.png)
 
-Architecture multiservice : Electron passe par un Gateway unique (Serveur-API), qui relaie vers quatre services. Chacun possède sa base PostgreSQL. Le Dashboard est un conteneur séparé de l’API. Détails : [architecture](docs/architecture.md).
+Architecture multiservice : Electron et l’application mobile passent par un Gateway unique (Serveur-API), qui relaie vers quatre services. Chacun possède sa base PostgreSQL. Le Dashboard est un conteneur séparé de l’API. Détails : [architecture](docs/architecture.md).
 
 | Choix | Justification |
 |---|---|
@@ -235,8 +222,32 @@ Architecture multiservice : Electron passe par un Gateway unique (Serveur-API), 
 - [Guides détaillés par dépôt](docs/services/README.md)
 - [Validation, démonstration et résultats](docs/validation.md)
 - [Versions et publication](docs/versions.md)
+- [Configuration et dépannage des revues GitHub](docs/revues-github.md)
 - [Synchronisation facultative des clones](scripts/info-pull-clone.md)
 
 ## CI Infra
 
-Le CI valide Compose avec un secret de session temporaire, vérifie les scripts avec ShellCheck et compare les fichiers partagés entre services. Pour les dépôts privés, la comparaison requiert `CHATVARDAGE_REPOS_TOKEN` (lecture des contenus uniquement); sans ce secret, elle est signalée comme sautée. Les contrôles de chaque service restent dans leurs dépôts.
+Le CI valide Compose avec un secret de session temporaire, vérifie les scripts avec ShellCheck et compare les fichiers partagés entre services, ainsi que les hooks communs au client mobile et au client Web (`src/partage/` des dépôts Mobile et Frontend). Pour les dépôts privés, la comparaison requiert `CHATVARDAGE_REPOS_TOKEN` (lecture des contenus uniquement); sans ce secret, elle est signalée comme sautée. Les contrôles de chaque service restent dans leurs dépôts.
+
+## Sécurité et images
+
+Le [rapport d’audit](docs/audit-securite-2026-10-09.md) décrit les corrections, les résultats et les alertes résiduelles. Cette stack est une configuration de développement : le serveur de production, son reverse proxy et son HTTPS restent à définir et à auditer.
+
+`preparer-env-services.sh` dérive les seuls paramètres nécessaires à chaque service depuis le `.env` existant. Le dossier `.runtime-env` et le `.env` principal sont privés sur l'hôte; chaque conteneur voit seulement son sous-dossier en lecture seule. Si votre UID/GID Linux diffère de 1000, renseigner `LOCAL_UID` et `LOCAL_GID` avant le bootstrap. Ne pas régénérer les secrets d'une base existante.
+
+Après un bootstrap root, les sous-dossiers et fichiers dérivés appartiennent aussi à cet UID/GID : l'opérateur peut les régénérer sans sudo. Les éditions manuelles du fichier source doivent conserver le format `CLÉ=valeur`, sans `export` ni espace avant la clé.
+
+PostgreSQL 17, Redis 7.4 et Adminer 6.1.1 ont des images locales construites depuis les images officielles et mises à jour avec `apk upgrade`. Adminer rétablit `www-data` après ces mises à jour pour exécuter PHP sans privilège root. Utiliser `build --pull` pour reprendre les correctifs disponibles. Les images des services conservent les migrations Prisma au démarrage, avec le CLI local directement exécuté par Node (npm/npx supprimés au runtime). Auth compile son binaire en musl (`rust:1.88.0-alpine`) et tourne sur `node:22-alpine`.
+
+### Rebuild et remise en service sans supprimer les données
+
+Pour reprendre les correctifs des images sans perdre les données, la commande suivante reconstruit les neuf conteneurs ; elle respecte les dépendances et attend leur santé; une brève interruption est attendue pendant la recréation de PostgreSQL/Redis. Les volumes nommés et les secrets existants sont conservés.
+
+```sh
+docker compose run --rm --no-deps generer-env
+docker compose build --pull postgres redis auth-service room-service message-service user-config-service dashboard serveur-api adminer
+docker compose up -d --no-build --force-recreate --wait --wait-timeout 240 postgres redis auth-service room-service message-service user-config-service dashboard serveur-api adminer
+./scripts/healthcheck.sh
+```
+
+Le Gateway est lié à `127.0.0.1` par défaut. Pour un téléphone sur le réseau local de développement, une ouverture explicite via `API_BIND_ADDRESS` est nécessaire; en production, publier seulement le reverse proxy HTTPS et filtrer les ports internes et les outils d'administration.

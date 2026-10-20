@@ -86,7 +86,7 @@ dégrade silencieusement ce contrat.
 | 409  | Conflit (pseudo ou courriel déjà utilisé) |
 | 413  | Corps de la requête trop volumineux (plus de 16 Kio, voir `interface::http::routes`) |
 | 500  | Erreur interne du serveur |
-| 503  | Base de données indisponible (`GET /health`) |
+| 503  | Base de données indisponible (`GET /health`) ou calculs Argon2 saturés (attente de cinq secondes dépassée) |
 
 ---
 
@@ -280,11 +280,39 @@ ce compte, sur tous les appareils, celui de la requête compris
 (`version_auth` incrémentée, comme lors d'un changement de mot de passe).
 Il faut ensuite se reconnecter. Les autres services s'en aperçoivent au
 plus tard après leur cache de validation (`AUTH_CACHE_TTL_MS`, 10 s par
-défaut) ; les sockets ouverts de Message-Service sont fermés à leur
-revalidation suivante (60 s au plus).
+défaut). Authentification prévient Message-Service
+(`SERVICES_SESSIONS_REVOQUEES_URLS`), qui ferme aussitôt les sockets
+ouverts : chaque appareil reçoit `session.revoquee` et se déconnecte.
 
 Sans corps. **Réponse `204`**. **Erreurs** : `401` (jeton manquant,
 invalide ou déjà invalidé).
+
+---
+
+### POST /api/auth/logout-others 🔒
+
+« Déconnecter les autres appareils » : comme `logout-all` (tous les jetons
+et refresh tokens invalidés, Message-Service prévenu), puis une **nouvelle
+session** est ouverte pour l'appareil qui le demande, qui reste connecté.
+
+Sans corps. **Réponse `200`** : `{ jeton, refresh_token, utilisateur }`
+(même forme que `login`) ; le client remplace sa session par celle-ci.
+**Erreurs** : `401` (jeton manquant, invalide ou déjà invalidé, ou compte supprimé concurremment après invalidation). `500` si le stockage ou l’ouverture de la nouvelle session échoue.
+
+La notification de révocation est émise immédiatement après l’invalidation
+réussie, avant la relecture du compte et l’ouverture de la nouvelle session.
+Une relecture ne trouvant plus le compte produit `401`, même après invalidation.
+Une erreur ultérieure (`401` ou `500`) ne restaure pas les anciens jetons et
+n’empêche pas cette notification. Si l’invalidation elle-même échoue ou ne
+trouve plus le compte, aucune notification de cette mutation n’est émise.
+
+Après un `500`, l’utilisateur peut se reconnecter avec `POST /api/auth/login`
+quand le stockage est à nouveau disponible et si son compte existe toujours;
+les anciens jetons ne permettent pas de reprendre la session invalidée.
+
+Même prévention de Message-Service après un changement de mot de passe
+(`PATCH /api/auth/me`), un changement de rôle et une suppression de compte :
+les autres appareils sont déconnectés tout de suite.
 
 ---
 
@@ -468,6 +496,11 @@ la modération se gère par serveur, dans Room-Service.
 
 **Réponse `200`** : l'objet utilisateur mis à jour.
 
+Si le rôle demandé est déjà celui du compte non-admin, la réponse contient son
+profil inchangé : `version_auth` et `modifie_le` sont conservés, ses jetons restent
+valides et aucune notification de révocation ne part. Une promotion réelle
+invalide ses jetons; une cible déjà admin reste interdite, même à rôle identique.
+
 **Erreurs** : `400` (valeur de rôle invalide), `403` si l'id cible un
 admin, `404` si l'id n'existe pas.
 
@@ -479,7 +512,7 @@ admin, `404` si l'id n'existe pas.
 - Chaque requête protégée présente un JWT signé (HMAC) contenant `sub`
   (id utilisateur — nom imposé par la norme JWT, non traduit),
   `version_auth` et `exp` (expiration — aussi imposé par la norme
-  JWT, 24h par défaut, configurable via `JWT_DUREE_DE_VIE_HEURES`). Après
+  JWT, 15 minutes pour les nouvelles sessions; anciens JWT sans `sid` selon leur configuration initiale). Après
   validation cryptographique, le middleware relit l'utilisateur en base :
   une suppression, un changement de rôle ou un changement de mot de passe
   est appliqué immédiatement.
@@ -498,3 +531,42 @@ admin, `404` si l'id n'existe pas.
 - Toutes les routes ci-dessus sont codées et testées (voir le
   [guide du service](../services/Authentification.md#lancer-les-tests)) — y compris `PATCH`/`DELETE /api/auth/me`
   et `GET`/`PATCH /api/users/{id}`.
+
+## Sessions renouvelables : register, login, refresh et logout
+
+Les réponses register/login gardent `jeton` et `utilisateur` et ajoutent `refresh_token`
+(64 caractères hexadécimaux opaques). Les anciens clients peuvent ignorer ce champ.
+Les nouveaux JWT d'accès durent 15 minutes, avec `sid` (famille) et `jti` (identifiant
+unique), en plus de `sub`, `version_auth` et `exp`. Les JWT déjà émis sans `sid`
+restent valides jusqu'à leur expiration ou révocation globale.
+
+**POST /api/auth/refresh**, sans Bearer : corps `{ "refresh_token": "<valeur opaque>" }`.
+Réponse 200 : même forme que login, avec un nouveau JWT et refresh token.
+La transaction PostgreSQL verrouille l'utilisateur, consomme l'ancien hash une
+seule fois et insère son successeur. Les changements de mot de passe, logout-all,
+suppressions et logout empêchent le renouvellement. Erreurs : 400 (JSON/format
+invalide), 401 (inconnu, consommé, expiré, révoqué ou version modifiée), 500 (stockage).
+
+La famille expire **30 jours depuis la connexion initiale**; les rotations ne
+repoussent pas cette échéance. Seuls les hashes SHA-256 des refresh tokens sont
+stockés dans `sessions_refresh`. Aucun mot de passe n'est utilisé pour refresh.
+
+**POST /api/auth/logout**, sans Bearer : même corps; 204 idempotent.
+Révoque toute la famille correspondant au hash, même si le token a déjà été
+consommé. Un logout concurrent à refresh révoque aussi son successeur. Les JWT
+portant ce `sid` sont refusés par `/me` et les routes protégées. Les caches Auth des
+services existants conservent leur délai habituel de propagation. `logout-all`
+reste une révocation de tous les appareils par `version_auth`.
+
+Les deux nouvelles routes passent par Serveur-API et son quota par IP et route.
+Le Mobile stocke les tokens dans SecureStore, valide `/me` au démarrage, renouvelle
+après 401 et retente chaque requête au maximum une fois. Une promise partagée
+assure un seul refresh concurrent. Un échec de restauration/refresh efface l'état
+local et affiche Login. Une panne réseau de logout n'empêche pas ce nettoyage.
+
+Les lignes consommées restent jusqu'à l'expiration de leur famille pour permettre
+logout après une rotation concurrente. L'exploitation peut programmer une purge
+`DELETE FROM sessions_refresh WHERE expire_le < now()`; le service n'exécute pas
+automatiquement cette purge.
+
+Les calculs Argon2 sont limités à quatre en parallèle par instance, y compris après la déconnexion du client; la limite par IP reste appliquée au Gateway.
