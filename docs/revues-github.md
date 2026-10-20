@@ -1,5 +1,7 @@
 # Revues automatiques GitHub
 
+Les PR de `develop` vers `main` ne lancent aucune des trois revues automatiques ; les vérifications de build et de tests restent exécutées par leurs workflows. Un échec de l'étape de revue Codex est informatif (`continue-on-error: true`) : il reste visible dans les journaux sans faire échouer le job, et aucun commentaire de revue n'est publié si cette étape échoue.
+
 Les workflows `.github/workflows/claude-review.yml` essaient Claude, puis Copilot si aucune revue n'a été publiée. Le dernier recours Codex est limité aux PR issues du même dépôt, public ou privé ; il utilise l'environnement GitHub `codex-review`. Un quota Copilot dépassé fait échouer l'étape de revue et déclenche Codex, même si `continue-on-error` laisse le job Copilot vert. Le relais vérifie l'échec de la commande et celui de la publication. Une PR de fork ou un workflow annulé ne lance pas Codex.
 
 ## Secrets
